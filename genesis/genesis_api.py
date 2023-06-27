@@ -1,4 +1,5 @@
 
+import json
 
 from langchain.chains import OpenAPIEndpointChain, LLMChain
 from langchain.chains.base import Chain
@@ -85,7 +86,9 @@ def get_tool_genesis_location_summary(llm, spec, requests):
 def get_tool_genesis_warehouse_summary(llm, spec, requests):
     def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
         def _process_request(original_query: str, warehouse_id: int):
-            response_data = chain.run(str(warehouse_id))
+            response_data = chain.run(json.dumps({
+                "warehouse_id": warehouse_id
+            }))
             print("processor output")
             print('--------')
             print(":::Parameters:::")
