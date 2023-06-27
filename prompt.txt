@@ -1,0 +1,1 @@
+dynamic single-page website in ReactJS with links to different varieties of fish and descriptions of them. Add a grid layout for the fishes in the main page and on click should open the description.
