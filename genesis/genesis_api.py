@@ -4,7 +4,7 @@ from langchain.chains import OpenAPIEndpointChain, LLMChain
 from langchain.chains.base import Chain
 from langchain.base_language import BaseLanguageModel
 from langchain.requests import Requests
-from langchain.agents.tools import Tool
+from langchain.tools.base import Tool, StructuredTool
 from langchain.prompts import PromptTemplate
 from langchain.tools.openapi.utils.api_models import APIOperation
 from langchain.chains.api.openapi.chain import OpenAPIEndpointChain
@@ -23,7 +23,7 @@ def _create_api_tool(llm: BaseLanguageModel,
                      name: Optional[str] = None,
                      description: Optional[str] = None,
                      auto_parse_output_using_llm: bool = False,
-                     output_processor: Callable[[], str] = None):
+                     output_processor: Optional[Callable[[Chain], Callable[..., str]]] = None):
     api_operation = APIOperation.from_openapi_spec(spec, endpoint, method)
     chain = OpenAPIEndpointChain.from_api_operation(
         api_operation,
@@ -33,13 +33,18 @@ def _create_api_tool(llm: BaseLanguageModel,
         return_intermediate_steps=False,
         raw_response=not auto_parse_output_using_llm
     )
-    tool_func = chain.run
+    
     if output_processor is not None:
-        tool_func = lambda txt, **kwargs: output_processor(context=chain.run(txt, **kwargs), query=txt)
+        return StructuredTool.from_function(
+            func=output_processor(chain),
+            name=name or api_operation.operation_id,
+            description=description or api_operation.description
+        )
+
     return Tool(
         name=name or api_operation.operation_id,
         description=description or api_operation.description,
-        func=tool_func
+        func=chain.run
     )
 
 
@@ -78,15 +83,22 @@ def get_tool_genesis_location_summary(llm, spec, requests):
     
 
 def get_tool_genesis_warehouse_summary(llm, spec, requests):
-    def process_chain_output(context: str, query: str) -> str:
-        print("post-process output")
-        print('--------')
-        print(":::Context:::")
-        print(context)
-        print(':::Query:::')
-        print(query)
-        print('--------')
-        return '3'
+    def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
+        def _process_request(original_query: str, warehouse_id: int):
+            response_data = chain.run(str(warehouse_id))
+            print("processor output")
+            print('--------')
+            print(":::Parameters:::")
+            print(warehouse_id)
+            print(':::Query:::')
+            print(original_query)
+            print(':::Response:::')
+            print(response_data)
+            print('--------')
+            
+            # Stub response. Replace after searching
+            return "Can't find requested details"
+        return _process_request
     return _create_api_tool(
         llm, spec, requests,
         '/metrics/warehouse/{id}',

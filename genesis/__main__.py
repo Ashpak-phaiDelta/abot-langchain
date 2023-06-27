@@ -14,7 +14,8 @@ load_dotenv()
 
 llm = OpenAI(
     temperature=0.1,
-    max_tokens=512
+    max_tokens=512,
+    # verbose=True
 )
 
 

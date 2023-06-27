@@ -1,6 +1,7 @@
 
 from pathlib import Path
 
+from langchain.agents.agent_types import AgentType
 from langchain.agents.tools import Tool, BaseTool
 from langchain.requests import Requests
 
@@ -76,7 +77,7 @@ def fetch_genesis_spec() -> OpenAPISpec:
     elif Path(spec_file).exists():
         return OpenAPISpec.from_file(spec_file)
 
-    raise ValueError("You must set the setting `openapi_file` or `OPENAPI_FILE` environment to a path that exists.\nIt was set to '%s'" % str(spec_file))
+    raise ValueError("You must set the setting `openapi_file` or `GENESIS_OPENAPI_FILE` environment to a path that exists.\nIt was set to '%s'" % str(spec_file))
 
 
 def get_genesis_api_agent(llm, *additional_tools):
@@ -92,13 +93,14 @@ def get_genesis_api_agent(llm, *additional_tools):
         # _get_tool_genesis_sensor_list(llm, spec, requests)
         get_tool_genesis_location_list(llm, spec, requests),
         get_tool_genesis_location_summary(llm, spec, requests),
-        # get_tool_genesis_warehouse_summary(llm, spec, requests),
+        get_tool_genesis_warehouse_summary(llm, spec, requests),
         *additional_tools
     ]
 
     return make_agent(
         llm,
         genesis_tools,
+        agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
         verbose=get_agent_is_verbose(),
         agent_kwargs=dict(
             prefix=GENESIS_AGENT_PROMPT_PREFIX
