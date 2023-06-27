@@ -86,13 +86,14 @@ def get_tool_genesis_location_summary(llm, spec, requests):
 def get_tool_genesis_warehouse_summary(llm, spec, requests):
     def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
         def _process_request(original_query: str, warehouse_id: int):
-            response_data = chain.run(json.dumps({
+            params_jsonified = json.dumps({
                 "warehouse_id": warehouse_id
-            }))
+            })
+            response_data = chain.run(params_jsonified)
             print("processor output")
             print('--------')
             print(":::Parameters:::")
-            print(warehouse_id)
+            print(params_jsonified)
             print(':::Query:::')
             print(original_query)
             print(':::Response:::')
