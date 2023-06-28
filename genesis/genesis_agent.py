@@ -94,8 +94,10 @@ def get_genesis_api_agent(llm, *additional_tools):
         get_tool_genesis_location_list(llm, spec, requests),
         get_tool_genesis_location_summary(llm, spec, requests),
         get_tool_genesis_warehouse_summary(llm, spec, requests),
+        get_tool_genesis_unit_summary(llm, spec, requests),
         *additional_tools
     ]
+    
 
     return make_agent(
         llm,

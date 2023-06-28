@@ -186,14 +186,58 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests):
     return _create_api_tool(
         llm, spec, requests,
         '/metrics/warehouse/{id}',
-        description="""Use to get a summary of all sensors at warehouse-level id, i.e. inside location. (eg: /metrics/warehouse/1). Counter-example: /metrics/warehouse/VER_W1. Input must be a dictionary of parameters as requested. Example: {{"warehouse_id": 1, "original_query": "what the user asked"}}. It can give a list of sensors in the warehouse-level, their values, state, etc. Use it to also get a list of units and their status. i.e. How many sensors in each unit are out of range/normal, or count each unit's status for the question 'How many units are out_of_range?'. You can infer warehouse id from previous input, else ask user to enter warehouse name""",
+        description="""Use to get a summary of all sensors at warehouse-level id, i.e. inside location. (eg: /metrics/warehouse/1). Counter-example: /metrics/warehouse/VER_W1. Input must be a dictionary of parameters as requested. Example: {{"warehouse_id": 1, "original_query": "what the user asked"}}. It can give a list of sensors in the warehouse-level, their values, state, etc. Use it to also get a list of units and their status. i.e. How many sensors in each unit are out of range/normal, or count each sensor's status for the question 'How many sensors are out_of_range?'. You can infer warehouse id from previous input, else ask user to enter warehouse name""",
         output_processor=process_chain_output
     )
+
+def get_tool_genesis_unit_summary(llm, spec, requests):
+    def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
+        def _process_request(original_query: str, warehouse_id: int):
+            params_jsonified = json.dumps({
+                "warehouse_id": warehouse_id
+            })
+            response_data = chain.run(params_jsonified)
+            resp_json = json.loads(response_data)
+
+            response_text_summary = ''
+            
+            response_text_summary += '# Warehouse level unit\n'
+            warlvl_sensors = resp_json['wv_unit_summary']
+
+            warlvl_df = pd.DataFrame(warlvl_sensors)
+
+            response_text_summary += "Level info: ## is Sensor type, ### is Sensor subtype\n"
+            response_text_summary += "Sensor data format: Name: Value: Status\n"
+
+            for location_name, df_mt in warlvl_df.groupby('Location Name'):
+                response_text_summary += "## %s\n" % location_name
+                for lbl, sensor_row in df_mt.iterrows():
+                    response_text_summary += '{}: {} {}: {}\n'.format(
+                        sensor_row['Unit Name'],
+                        sensor_row['Value'],
+                        sensor_row['Location Name'] or '',
+                        sensor_row['State']
+                    )
+
+            # TODO warehouse units
+            # response_text_summary += '# Warehouse level units\n'
+
+            return response_text_summary
+        return _process_request
+    return _create_api_tool(
+        llm, spec, requests,
+        '/metrics/warehouse/{id}',
+        description="""Use to get a summary of all unit at warehouse-level id, i.e. inside location. (eg: /metrics/warehouse/1). Counter-example: /metrics/warehouse/VER_W1. Input must be a dictionary of parameters as requested. Example: {{"warehouse_id": 1, "original_query": "what the user asked"}}. It can give a list of unit in the warehouse-level, their values, state, etc. Use it to also get a list of units and their status. i.e. How many unit in each location are out of range/normal,or count each unit's status for the question 'How many units are out_of_range?'. You can infer warehouse id from previous input, else ask user to enter warehouse name""",
+        output_processor=process_chain_output
+    )
+
+
 
 __all__ = [
     # '_get_tool_genesis_sensor_status',
     'get_tool_genesis_sensor_list',
     'get_tool_genesis_location_summary',
     'get_tool_genesis_location_list',
-    'get_tool_genesis_warehouse_summary'
+    'get_tool_genesis_warehouse_summary',
+    'get_tool_genesis_unit_summary'
 ]
