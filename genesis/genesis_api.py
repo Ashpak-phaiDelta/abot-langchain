@@ -1,3 +1,7 @@
+import json
+import gzip
+from transformers import GPT2TokenizerFast
+import yaml
 
 
 from langchain.chains import OpenAPIEndpointChain, LLMChain
@@ -9,6 +13,11 @@ from langchain.prompts import PromptTemplate
 from langchain.tools.openapi.utils.api_models import APIOperation
 from langchain.chains.api.openapi.chain import OpenAPIEndpointChain
 from langchain.tools.openapi.utils.openapi_utils import OpenAPISpec
+
+from langchain.tools.json.tool import JsonSpec
+from langchain.agents.agent_toolkits import JsonToolkit
+from langchain.agents import create_json_agent, AgentExecutor
+from langchain.llms.openai import OpenAI
 
 from typing import Optional, Callable
 
@@ -42,6 +51,17 @@ def _create_api_tool(llm: BaseLanguageModel,
         func=tool_func
     )
 
+def reduce_tokens(input_text, max_tokens):
+    tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
+    tokenized_input = tokenizer.encode(input_text, add_special_tokens=False)
+    
+    if len(tokenized_input) <= max_tokens:
+        return input_text
+    
+    reduced_tokens = tokenized_input[:max_tokens]
+    reduced_text = tokenizer.decode(reduced_tokens)
+    
+    return reduced_text
 
 
 def _get_tool_genesis_sensor_status(llm, spec, requests):
@@ -53,10 +73,64 @@ def _get_tool_genesis_sensor_status(llm, spec, requests):
 
 
 def _get_tool_genesis_sensor_list(llm, spec, requests):
+    def process_chain_output(context: str, query: str) -> str:
+        data = json.loads(context)
+        reply = llm(f"List all keys from this json {json.dumps(data[0])}")
+
+
+
+        # key = llm(f"where would {query} fit as value from this list of keys [{reply}] ")
+        key = llm(f"""
+                  Instructions:
+                  - Select best suited key from given list [{reply}]
+                  Example: 
+                  - Temperature :-> sensor_type
+                  - VER_W2_B5_FF_C : -> global_unit_name
+                  - Humidity :-> sensor_type
+                  - KUD_W1_B2_GF_X :-> global_unit_name
+
+                Given the following text:
+                Question: {query}
+                Answer:
+
+                  """)
+
+        print(key, query)
+
+        list_of_sensor= []
+        # context = json.loads(context)
+        for sensor in data:
+            if sensor[key.strip()].lower() == query.strip().lower():
+                list_of_sensor.append({
+                        "sensor_id": sensor['sensor_id'],
+                        "sensor_name": sensor['global_sensor_name'],
+                        "sensor_type": sensor['sensor_type'],
+                        "unit_id": sensor['unit_id'],
+                        "unit_name": sensor['global_unit_name']
+                        }
+            )
+        context = json.dumps(list_of_sensor)
+        print(context)
+
+
+        # list_of_item = []
+        # for item in data:
+        #     flag = llm("reply in 1 or 0 if {query} fits for {item}")
+        #     print(".",end="")
+        #     if int(flag):
+        #         list_of_item.append(item)
+
+        # print(item)
+
+        return context
+
     return _create_api_tool(
         llm, spec, requests,
         '/sensors',
-        description='Use to get a list of every sensor available in the whole application'
+        name='sensor_list_to_get_sensor_id',
+        description='Use to get a list of every sensor available in the whole application. their id (integer for use in summary), name and status of sensor (normal, out_of_range, etc) ID can be used for other operations that need it. tool can be used to get ID for other tools',
+        output_processor=process_chain_output
+        
     )
 
 
