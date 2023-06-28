@@ -15,7 +15,7 @@ from langchain.tools.openapi.utils.openapi_utils import OpenAPISpec
 from typing import Optional, Callable
 
 
-TOOL_VERBOSE = False
+TOOL_VERBOSE = True
 
 def _create_api_tool(llm: BaseLanguageModel,
                      spec: OpenAPISpec,
@@ -61,6 +61,7 @@ def _create_api_tool(llm: BaseLanguageModel,
 def get_tool_genesis_sensor_list(llm, spec, requests):
     def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
         def _process_request(original_query: str):
+            # TODO Finish this
             response_data = chain.run()
 
             data = json.loads(response_data)
@@ -114,7 +115,7 @@ def get_tool_genesis_sensor_list(llm, spec, requests):
         llm, spec, requests,
         '/sensors',
         name='sensor_list_to_get_sensor_id',
-        description='Use to get a list of every sensor available in the whole application. their id (integer for use in summary), name and status of sensor (normal, out_of_range, etc) ID can be used for other operations that need it. tool can be used to get ID for other tools',
+        description='Use to get a list of every sensor available in the whole application. their id (integer for use in summary), name and status of sensor (normal, out_of_range, etc) ID can be used for other operations that need it. tool can be used to get ID for other tools, Input MUST have the original query, and no other parameters are there. It MUST be a dictionary such as {{"original query": "what the user typed"}}, no filters are there.',
         output_processor=process_chain_output
     )
 
@@ -124,7 +125,7 @@ def get_tool_genesis_location_list(llm, spec, requests):
         llm, spec, requests,
         '/locations',
         name='location_list_to_get_location_id',
-        description='Use to get a list of all locations/warehouses, their `id` (integer for use in summary), name and status of the location (normal, out_of_range, etc). Use it to find location ID given its name by filtering it. The ID can be used for other operations that need it. This tool can be used to get ID for other tools.'
+        description='Use to get a list of all locations/warehouses, their `id` (integer for use in summary), name and status of the location (normal, out_of_range, etc). Use it to find location ID given its name by filtering it. The ID can be used for other operations that need it. This tool can be used to get ID for other tools. Output MUST be in JSON format as {{"required keys": "their values but as string"}}'
     )
 
 def get_tool_genesis_location_summary(llm, spec, requests):
@@ -132,9 +133,9 @@ def get_tool_genesis_location_summary(llm, spec, requests):
         llm, spec, requests,
         '/locations/{id}/summary',
         name='location_summary_id_integer',
-        description='Can get summary of a location/warehouse id (eg: /locations/1/summary) (counter-example: /locations/VER_W1/summary) (ONLY integer, not like VER_W1 or Verna, etc, but MUST be like 1, 2, etc.) such as power, attendance, metrics summary, emergency, etc. Use `location_list` tool to get id first'
+        description='Can get summary of a location/warehouse id (eg: /locations/1/summary) (counter-example: /locations/VER_W1/summary) (ONLY integer, not like VER_W1 or Verna, etc, but MUST be like 1, 2, etc.) such as power, attendance, metrics summary, emergency, etc. Use `location_list_to_get_location_id` tool to get id first'
     )
-    
+
 
 def get_tool_genesis_warehouse_summary(llm, spec, requests):
     def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
@@ -167,7 +168,9 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests):
                             sensor_row['State']
                         )
 
-
+            # TODO warehouse units
+            # response_text_summary += '# Warehouse level units\n'
+            
             # print("processor output")
             # print('--------')
             # print(":::Parameters:::")
@@ -178,13 +181,12 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests):
             # print(response_data)
             # print('--------')
             
-            # Stub response. Replace after searching
             return response_text_summary
         return _process_request
     return _create_api_tool(
         llm, spec, requests,
         '/metrics/warehouse/{id}',
-        description="Use to get a summary of all sensors at warehouse-level id, i.e. inside location. (eg: /metrics/warehouse/1). Counter-example: /locations/VER_W1/summary. It can give a list of sensors in the warehouse-level, their values, state, etc. Use it to also get a list of units and their status. i.e. How many sensors in each unit are out of range/normal, or count each unit's status for the question 'How many units are out_of_range?'.",
+        description="""Use to get a summary of all sensors at warehouse-level id, i.e. inside location. (eg: /metrics/warehouse/1). Counter-example: /metrics/warehouse/VER_W1. Input must be a dictionary of parameters as requested. Example: {{"warehouse_id": 1, "original_query": "what the user asked"}}. It can give a list of sensors in the warehouse-level, their values, state, etc. Use it to also get a list of units and their status. i.e. How many sensors in each unit are out of range/normal, or count each unit's status for the question 'How many units are out_of_range?'. You can infer warehouse id from previous input, else ask user to enter warehouse name""",
         output_processor=process_chain_output
     )
 
