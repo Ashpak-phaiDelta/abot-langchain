@@ -190,7 +190,7 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests):
         output_processor=process_chain_output
     )
 
-def get_tool_genesis_unit_summary(llm, spec, requests):
+def get_tool_genesis_warehouse_unit_summary(llm, spec, requests):
     def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
         def _process_request(original_query: str, warehouse_id: int):
             params_jsonified = json.dumps({
@@ -239,5 +239,5 @@ __all__ = [
     'get_tool_genesis_location_summary',
     'get_tool_genesis_location_list',
     'get_tool_genesis_warehouse_summary',
-    'get_tool_genesis_unit_summary'
+    'get_tool_genesis_warehouse_unit_summary'
 ]
