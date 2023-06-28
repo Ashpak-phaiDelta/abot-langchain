@@ -4,7 +4,7 @@ FROM tiangolo/uvicorn-gunicorn-fastapi:python3.9
 
 # Define default environment variables
 ENV PORT=8080
-ENV APP_MODULE=langcorn:create_service("chat_chain:agent_chain")
+ENV APP_MODULE=langcorn_app:app
 ENV LOG_LEVEL=info
 ENV WEB_CONCURRENCY=2
 
