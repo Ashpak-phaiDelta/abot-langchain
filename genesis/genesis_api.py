@@ -79,9 +79,12 @@ def get_tool_genesis_location_summary(llm, spec, requests):
         llm, spec, requests,
         '/locations/{id}/summary',
         name='location_summary_id_integer',
-        description='Can get summary of a location/warehouse id (eg: /locations/1/summary) (counter-example: /locations/VER_W1/summary) (ONLY integer, not like VER_W1 or Verna, etc, but MUST be like 1, 2, etc.) such as power, attendance, metrics summary, etc. Use `location_list` tool to get id first'
+        description='Can get summary of a location/warehouse id (eg: /locations/1/summary) (counter-example: /locations/VER_W1/summary) (ONLY integer, not like VER_W1 or Verna, etc, but MUST be like 1, 2, etc.) such as power, attendance, metrics summary, emergency, etc. Use `location_list` tool to get id first'
     )
     
+
+import json
+import pandas as pd
 
 def get_tool_genesis_warehouse_summary(llm, spec, requests):
     def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
@@ -90,18 +93,43 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests):
                 "warehouse_id": warehouse_id
             })
             response_data = chain.run(params_jsonified)
-            print("processor output")
-            print('--------')
-            print(":::Parameters:::")
-            print(params_jsonified)
-            print(':::Query:::')
-            print(original_query)
-            print(':::Response:::')
-            print(response_data)
-            print('--------')
+            resp_json = json.loads(response_data)
+
+            response_text_summary = ''
+            
+            response_text_summary += '# Warehouse level sensors\n'
+            warlvl_sensors = resp_json['wv_warehouse_metrics']
+
+            warlvl_df = pd.DataFrame(warlvl_sensors)
+
+            response_text_summary += "Level info: ## is Sensor type, ### is Sensor subtype\n"
+            response_text_summary += "Sensor data format: Name: Value: Status\n"
+
+            for metric_type_name, df_mt in warlvl_df.groupby('Metric Type'):
+                response_text_summary += "## %s\n" % metric_type_name
+                for metric_subtype_name, df_mst in df_mt.groupby('Metric Sub-Type'):
+                    response_text_summary += "### %s\n" % metric_subtype_name
+                    for lbl, sensor_row in df_mst.iterrows():
+                        response_text_summary += '{}: {} {}: {}\n'.format(
+                            sensor_row['Sensor Name'],
+                            sensor_row['Value'],
+                            sensor_row['Unit'] or '',
+                            sensor_row['State']
+                        )
+
+
+            # print("processor output")
+            # print('--------')
+            # print(":::Parameters:::")
+            # print(params_jsonified)
+            # print(':::Query:::')
+            # print(original_query)
+            # print(':::Response:::')
+            # print(response_data)
+            # print('--------')
             
             # Stub response. Replace after searching
-            return "Can't find requested details"
+            return response_text_summary
         return _process_request
     return _create_api_tool(
         llm, spec, requests,

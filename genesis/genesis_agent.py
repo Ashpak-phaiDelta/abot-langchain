@@ -29,7 +29,7 @@ from functools import lru_cache
 class GenesisSettings(BaseSettings):
     auth_token: str
     agent_is_verbose: bool = False
-    openapi_file: Union[AnyUrl, FilePath, str] = 'genesis_openapi.json'
+    openapi_file: Union[AnyUrl, FilePath, str] = 'genesis_openapi.yaml'
 
     class Config:
         env_file = '.env'
