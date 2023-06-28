@@ -90,7 +90,7 @@ def get_genesis_api_agent(llm, *additional_tools):
     # List of tools available to the agent
     genesis_tools = [
         # _get_tool_genesis_sensor_status(llm, spec, requests),
-        _get_tool_genesis_sensor_list(llm, spec, requests),
+        get_tool_genesis_sensor_list(llm, spec, requests),
         get_tool_genesis_location_list(llm, spec, requests),
         get_tool_genesis_location_summary(llm, spec, requests),
         get_tool_genesis_warehouse_summary(llm, spec, requests),
