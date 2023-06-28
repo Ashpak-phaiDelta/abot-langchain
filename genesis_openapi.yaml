@@ -1,0 +1,180 @@
+openapi: 3.0.2
+info:
+  title: FastAPI
+  version: 0.1.0
+servers:
+- url: https://api.phaidelta.com/backend
+  # variables:
+  #   env:
+  #     default: uat
+  #     enum:
+  #       - 'uat'
+  #       - 'api'
+  #     description: Testing server or production server
+paths:
+  /locations:
+    get:
+      summary: List of warehouses
+      description: Get a list of all warehouses/locations available on this server.
+      operationId: Locations
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: number
+                    latitude:
+                      type: number
+                      example: 0.1
+                    longitude:
+                      type: number
+                      example: 0.1
+                    name:
+                      type: string
+                      example: VER_W1
+                    state:
+                      type: string
+                      example: NORMAL
+
+  /locations/{id}/summary:
+    get:
+      summary: General warehouse summary
+      description: Get summary of warehouse id such as sensors out-of-range, power value, emergencies, etc.
+      operationId: LocationSummary
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: 
+                  attendance:
+                    type: object
+                    properties:
+                      state:
+                        type: string
+                      value:
+                        type: number
+                  emergencies:
+                    type: object
+                    properties:
+                      state:
+                        type: string
+                      value:
+                        type: number
+                  metrics: 
+                    type: object
+                    properties:
+                      state:
+                        type: string
+                      value:
+                        type: number
+                  power: 
+                    type: object
+                    properties:
+                      state:
+                        type: string
+                      value:
+                        type: number
+                      unit:
+                        type: string
+  /metrics/warehouse/{id}:
+    get:
+      summary: Warehouse and unit detailed summary
+      description: Get warehouse sensors details (wv_warehouse_metrics) and warehouse-level unit details (wv_unit_summary)
+      operationId: WarehouseDetails
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wv_warehouse_metrics:
+                    type: array
+                    description: Warehouse metrics
+                    items:
+                      type: object
+                      properties:
+                        "Block":
+                          type: string 
+                        "Location Id":
+                          type: string
+                        "Metric Sub-Type":
+                          type: string
+                        "Metric Type":
+                          type: string
+                        "Percentage":
+                          type: string
+                          nullable: true
+                        "Sensor Id":
+                          type: integer
+                        "Sensor Name":
+                          type: string
+                        "State":
+                          type: string
+                        "Threshold crosses":
+                          type: string
+                          nullable: true
+                        "Unit":
+                          type: string
+                        "Value":
+                          oneOf:
+                            - type: string
+                            - type: number
+                          nullable: true
+                        "Value Duration Minutes":
+                          oneOf:
+                            - type: string
+                            - type: number
+                          nullable: true
+                  wv_unit_summary:
+                    type: array
+                    description: Unit summary
+                    items:
+                      type: object
+                      properties:
+                        "Block":
+                          type: string 
+                        "Location Id":
+                          type: string
+                        "Location Alias":
+                          type: string
+                        "Location Name":
+                          type: string
+                        "State":
+                          type: string
+                        "Unit Alias":
+                          type: string
+                        "Unit Id":
+                          type: number
+                        "Unit Name":
+                          type: string
+                        "Value":
+                          oneOf:
+                            - type: string
+                            - type: number
+                          nullable: true
+components:
+  schemas:
+    {}

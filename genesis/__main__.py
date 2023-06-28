@@ -12,9 +12,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def read_input():
+    '''Simple prompt for user to enter input for asking'''
+    while True:
+        inpt = input('> ')
+        if len(inpt) > 0:
+            return inpt
+
+
 llm = OpenAI(
     temperature=0.1,
-    max_tokens=512
+    max_tokens=512,
+    # verbose=True
 )
 
 
@@ -29,15 +38,9 @@ tools.extend(
             "human" # Human-input
         ],
         llm=llm,
-        input_func=input
+        input_func=read_input
     )
 )
-
-def read_input():
-    while True:
-        inpt = input('> ')
-        if len(inpt) > 0:
-            return inpt
 
 if __name__ == '__main__':
     agent = get_genesis_api_agent(llm, *tools)#make_agent(llm, tools)
