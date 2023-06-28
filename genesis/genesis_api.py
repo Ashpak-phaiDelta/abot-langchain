@@ -1,9 +1,6 @@
-import json
-import gzip
-from transformers import GPT2TokenizerFast
-import yaml
 
 import json
+import pandas as pd
 
 from langchain.chains import OpenAPIEndpointChain, LLMChain
 from langchain.chains.base import Chain
@@ -15,15 +12,10 @@ from langchain.tools.openapi.utils.api_models import APIOperation
 from langchain.chains.api.openapi.chain import OpenAPIEndpointChain
 from langchain.tools.openapi.utils.openapi_utils import OpenAPISpec
 
-from langchain.tools.json.tool import JsonSpec
-from langchain.agents.agent_toolkits import JsonToolkit
-from langchain.agents import create_json_agent, AgentExecutor
-from langchain.llms.openai import OpenAI
-
 from typing import Optional, Callable
 
 
-TOOL_VERBOSE = False
+TOOL_VERBOSE = True
 
 def _create_api_tool(llm: BaseLanguageModel,
                      spec: OpenAPISpec,
@@ -43,7 +35,7 @@ def _create_api_tool(llm: BaseLanguageModel,
         return_intermediate_steps=False,
         raw_response=not auto_parse_output_using_llm
     )
-    
+
     if output_processor is not None:
         return StructuredTool.from_function(
             func=output_processor(chain),
@@ -57,19 +49,7 @@ def _create_api_tool(llm: BaseLanguageModel,
         func=chain.run
     )
 
-def reduce_tokens(input_text, max_tokens):
-    tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
-    tokenized_input = tokenizer.encode(input_text, add_special_tokens=False)
-    
-    if len(tokenized_input) <= max_tokens:
-        return input_text
-    
-    reduced_tokens = tokenized_input[:max_tokens]
-    reduced_text = tokenizer.decode(reduced_tokens)
-    
-    return reduced_text
-
-
+# Old, from fulfillment
 # def _get_tool_genesis_sensor_status(llm, spec, requests):
 #     return _create_api_tool(
 #         llm, spec, requests,
@@ -78,66 +58,66 @@ def reduce_tokens(input_text, max_tokens):
 #     )
 
 
-# def _get_tool_genesis_sensor_list(llm, spec, requests):
-#     def process_chain_output(context: str, query: str) -> str:
-#         data = json.loads(context)
-#         reply = llm(f"List all keys from this json {json.dumps(data[0])}")
+def get_tool_genesis_sensor_list(llm, spec, requests):
+    def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
+        def _process_request(original_query: str):
+            # TODO Finish this
+            response_data = chain.run()
 
+            data = json.loads(response_data)
+            reply = llm(f"List all keys from this json {json.dumps(data[0])}")
 
+            # key = llm(f"where would {query} fit as value from this list of keys [{reply}] ")
+            key = llm(f"""
+                    Instructions:
+                    - Select best suited key from given list [{reply}]
+                    Example: 
+                    - Temperature :-> sensor_type
+                    - VER_W2_B5_FF_C : -> global_unit_name
+                    - Humidity :-> sensor_type
+                    - KUD_W1_B2_GF_X :-> global_unit_name
 
-#         # key = llm(f"where would {query} fit as value from this list of keys [{reply}] ")
-#         key = llm(f"""
-#                   Instructions:
-#                   - Select best suited key from given list [{reply}]
-#                   Example: 
-#                   - Temperature :-> sensor_type
-#                   - VER_W2_B5_FF_C : -> global_unit_name
-#                   - Humidity :-> sensor_type
-#                   - KUD_W1_B2_GF_X :-> global_unit_name
+                    Given the following text:
+                    Question: {original_query}
+                    Answer:
 
-#                 Given the following text:
-#                 Question: {query}
-#                 Answer:
+                    """)
 
-#                   """)
+            print(key, original_query)
 
-#         print(key, query)
+            list_of_sensor= []
+            # context = json.loads(context)
+            for sensor in data:
+                if sensor[key.strip()].lower() == original_query.strip().lower():
+                    list_of_sensor.append({
+                            "sensor_id": sensor['sensor_id'],
+                            "sensor_name": sensor['global_sensor_name'],
+                            "sensor_type": sensor['sensor_type'],
+                            "unit_id": sensor['unit_id'],
+                            "unit_name": sensor['global_unit_name']
+                            }
+                )
+            context = json.dumps(list_of_sensor)
+            print(context)
 
-#         list_of_sensor= []
-#         # context = json.loads(context)
-#         for sensor in data:
-#             if sensor[key.strip()].lower() == query.strip().lower():
-#                 list_of_sensor.append({
-#                         "sensor_id": sensor['sensor_id'],
-#                         "sensor_name": sensor['global_sensor_name'],
-#                         "sensor_type": sensor['sensor_type'],
-#                         "unit_id": sensor['unit_id'],
-#                         "unit_name": sensor['global_unit_name']
-#                         }
-#             )
-#         context = json.dumps(list_of_sensor)
-#         print(context)
+            # list_of_item = []
+            # for item in data:
+            #     flag = llm("reply in 1 or 0 if {query} fits for {item}")
+            #     print(".",end="")
+            #     if int(flag):
+            #         list_of_item.append(item)
 
+            # print(item)
 
-#         # list_of_item = []
-#         # for item in data:
-#         #     flag = llm("reply in 1 or 0 if {query} fits for {item}")
-#         #     print(".",end="")
-#         #     if int(flag):
-#         #         list_of_item.append(item)
-
-#         # print(item)
-
-#         return context
-
-#     return _create_api_tool(
-#         llm, spec, requests,
-#         '/sensors',
-#         name='sensor_list_to_get_sensor_id',
-#         description='Use to get a list of every sensor available in the whole application. their id (integer for use in summary), name and status of sensor (normal, out_of_range, etc) ID can be used for other operations that need it. tool can be used to get ID for other tools',
-#         output_processor=process_chain_output
-        
-#     )
+            return context
+        return _process_request
+    return _create_api_tool(
+        llm, spec, requests,
+        '/sensors',
+        name='sensor_list_to_get_sensor_id',
+        description='Use to get a list of every sensor available in the whole application. their id (integer for use in summary), name and status of sensor (normal, out_of_range, etc) ID can be used for other operations that need it. tool can be used to get ID for other tools, Input MUST have the original query, and no other parameters are there. It MUST be a dictionary such as {{"original query": "what the user typed"}}, no filters are there.',
+        output_processor=process_chain_output
+    )
 
 
 def get_tool_genesis_location_list(llm, spec, requests):
@@ -145,7 +125,7 @@ def get_tool_genesis_location_list(llm, spec, requests):
         llm, spec, requests,
         '/locations',
         name='location_list_to_get_location_id',
-        description='Use to get a list of all locations/warehouses, their `id` (integer for use in summary), name and status of the location (normal, out_of_range, etc). Use it to find location ID given its name by filtering it. The ID can be used for other operations that need it. This tool can be used to get ID for other tools.'
+        description='Use to get a list of all locations/warehouses, their `id` (integer for use in summary), name and status of the location (normal, out_of_range, etc). Use it to find location ID given its name by filtering it. The ID can be used for other operations that need it. This tool can be used to get ID for other tools. Output MUST be in JSON format as {{"required keys": "their values but as string"}}'
     )
 
 def get_tool_genesis_location_summary(llm, spec, requests):
@@ -153,12 +133,9 @@ def get_tool_genesis_location_summary(llm, spec, requests):
         llm, spec, requests,
         '/locations/{id}/summary',
         name='location_summary_id_integer',
-        description='Can get summary of a location/warehouse id (eg: /locations/1/summary) (counter-example: /locations/VER_W1/summary) (ONLY integer, not like VER_W1 or Verna, etc, but MUST be like 1, 2, etc.) such as power, attendance, metrics summary, emergency, etc. Use `location_list` tool to get id first'
+        description='Can get summary of a location/warehouse id (eg: /locations/1/summary) (counter-example: /locations/VER_W1/summary) (ONLY integer, not like VER_W1 or Verna, etc, but MUST be like 1, 2, etc.) such as power, attendance, metrics summary, emergency, etc. Use `location_list_to_get_location_id` tool to get id first'
     )
-    
 
-import json
-import pandas as pd
 
 def get_tool_genesis_warehouse_summary(llm, spec, requests):
     def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
@@ -191,7 +168,9 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests):
                             sensor_row['State']
                         )
 
-
+            # TODO warehouse units
+            # response_text_summary += '# Warehouse level units\n'
+            
             # print("processor output")
             # print('--------')
             # print(":::Parameters:::")
@@ -202,19 +181,18 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests):
             # print(response_data)
             # print('--------')
             
-            # Stub response. Replace after searching
             return response_text_summary
         return _process_request
     return _create_api_tool(
         llm, spec, requests,
         '/metrics/warehouse/{id}',
-        description="Use to get a summary of all sensors at warehouse-level id, i.e. inside location. (eg: /metrics/warehouse/1). Counter-example: /locations/VER_W1/summary. It can give a list of sensors in the warehouse-level, their values, state, etc. Use it to also get a list of units and their status. i.e. How many sensors in each unit are out of range/normal, or count each unit's status for the question 'How many units are out_of_range?'.",
+        description="""Use to get a summary of all sensors at warehouse-level id, i.e. inside location. (eg: /metrics/warehouse/1). Counter-example: /metrics/warehouse/VER_W1. Input must be a dictionary of parameters as requested. Example: {{"warehouse_id": 1, "original_query": "what the user asked"}}. It can give a list of sensors in the warehouse-level, their values, state, etc. Use it to also get a list of units and their status. i.e. How many sensors in each unit are out of range/normal, or count each unit's status for the question 'How many units are out_of_range?'. You can infer warehouse id from previous input, else ask user to enter warehouse name""",
         output_processor=process_chain_output
     )
 
 __all__ = [
     # '_get_tool_genesis_sensor_status',
-    # '_get_tool_genesis_sensor_list',
+    'get_tool_genesis_sensor_list',
     'get_tool_genesis_location_summary',
     'get_tool_genesis_location_list',
     'get_tool_genesis_warehouse_summary'

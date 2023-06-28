@@ -175,6 +175,41 @@ paths:
                             - type: string
                             - type: number
                           nullable: true
+  /sensors:
+    get:
+      summary: List of all sensors
+      description: Get a list of all sensor available on this server
+      operationId: SensorList
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    sensor_id:
+                      type: number
+                    global_sensor_name:
+                      type: string
+                      example: VER_W1_B2_GF_B_1_temp
+                    sensor_alias:
+                      type: string
+                      example: B2 AC 1_temp
+                    sensor_type:
+                      type: string
+                      example: Temperature
+                    metric_unit:
+                      type: string
+                      example: Celsius
+                    unit_id:
+                      type: number
+                    unit_alias:
+                      type: string
+                      example: B2 AC
+
 components:
   schemas:
     {}

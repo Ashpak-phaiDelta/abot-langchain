@@ -21,7 +21,7 @@ def read_input():
 
 
 llm = OpenAI(
-    temperature=0.1,
+    temperature=0,
     max_tokens=512,
     # verbose=True
 )
