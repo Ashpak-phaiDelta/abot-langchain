@@ -70,74 +70,74 @@ def reduce_tokens(input_text, max_tokens):
     return reduced_text
 
 
-def _get_tool_genesis_sensor_status(llm, spec, requests):
-    return _create_api_tool(
-        llm, spec, requests,
-        '/genesis/query/sensor',
-        description='Use to get sensor details, metadata, status and location information from given sensor ID. Do not use if sensor type or name is given, use another tool. Do not make up an answer if this tool fails.'
-    )
+# def _get_tool_genesis_sensor_status(llm, spec, requests):
+#     return _create_api_tool(
+#         llm, spec, requests,
+#         '/genesis/query/sensor',
+#         description='Use to get sensor details, metadata, status and location information from given sensor ID. Do not use if sensor type or name is given, use another tool. Do not make up an answer if this tool fails.'
+#     )
 
 
-def _get_tool_genesis_sensor_list(llm, spec, requests):
-    def process_chain_output(context: str, query: str) -> str:
-        data = json.loads(context)
-        reply = llm(f"List all keys from this json {json.dumps(data[0])}")
+# def _get_tool_genesis_sensor_list(llm, spec, requests):
+#     def process_chain_output(context: str, query: str) -> str:
+#         data = json.loads(context)
+#         reply = llm(f"List all keys from this json {json.dumps(data[0])}")
 
 
 
-        # key = llm(f"where would {query} fit as value from this list of keys [{reply}] ")
-        key = llm(f"""
-                  Instructions:
-                  - Select best suited key from given list [{reply}]
-                  Example: 
-                  - Temperature :-> sensor_type
-                  - VER_W2_B5_FF_C : -> global_unit_name
-                  - Humidity :-> sensor_type
-                  - KUD_W1_B2_GF_X :-> global_unit_name
+#         # key = llm(f"where would {query} fit as value from this list of keys [{reply}] ")
+#         key = llm(f"""
+#                   Instructions:
+#                   - Select best suited key from given list [{reply}]
+#                   Example: 
+#                   - Temperature :-> sensor_type
+#                   - VER_W2_B5_FF_C : -> global_unit_name
+#                   - Humidity :-> sensor_type
+#                   - KUD_W1_B2_GF_X :-> global_unit_name
 
-                Given the following text:
-                Question: {query}
-                Answer:
+#                 Given the following text:
+#                 Question: {query}
+#                 Answer:
 
-                  """)
+#                   """)
 
-        print(key, query)
+#         print(key, query)
 
-        list_of_sensor= []
-        # context = json.loads(context)
-        for sensor in data:
-            if sensor[key.strip()].lower() == query.strip().lower():
-                list_of_sensor.append({
-                        "sensor_id": sensor['sensor_id'],
-                        "sensor_name": sensor['global_sensor_name'],
-                        "sensor_type": sensor['sensor_type'],
-                        "unit_id": sensor['unit_id'],
-                        "unit_name": sensor['global_unit_name']
-                        }
-            )
-        context = json.dumps(list_of_sensor)
-        print(context)
+#         list_of_sensor= []
+#         # context = json.loads(context)
+#         for sensor in data:
+#             if sensor[key.strip()].lower() == query.strip().lower():
+#                 list_of_sensor.append({
+#                         "sensor_id": sensor['sensor_id'],
+#                         "sensor_name": sensor['global_sensor_name'],
+#                         "sensor_type": sensor['sensor_type'],
+#                         "unit_id": sensor['unit_id'],
+#                         "unit_name": sensor['global_unit_name']
+#                         }
+#             )
+#         context = json.dumps(list_of_sensor)
+#         print(context)
 
 
-        # list_of_item = []
-        # for item in data:
-        #     flag = llm("reply in 1 or 0 if {query} fits for {item}")
-        #     print(".",end="")
-        #     if int(flag):
-        #         list_of_item.append(item)
+#         # list_of_item = []
+#         # for item in data:
+#         #     flag = llm("reply in 1 or 0 if {query} fits for {item}")
+#         #     print(".",end="")
+#         #     if int(flag):
+#         #         list_of_item.append(item)
 
-        # print(item)
+#         # print(item)
 
-        return context
+#         return context
 
-    return _create_api_tool(
-        llm, spec, requests,
-        '/sensors',
-        name='sensor_list_to_get_sensor_id',
-        description='Use to get a list of every sensor available in the whole application. their id (integer for use in summary), name and status of sensor (normal, out_of_range, etc) ID can be used for other operations that need it. tool can be used to get ID for other tools',
-        output_processor=process_chain_output
+#     return _create_api_tool(
+#         llm, spec, requests,
+#         '/sensors',
+#         name='sensor_list_to_get_sensor_id',
+#         description='Use to get a list of every sensor available in the whole application. their id (integer for use in summary), name and status of sensor (normal, out_of_range, etc) ID can be used for other operations that need it. tool can be used to get ID for other tools',
+#         output_processor=process_chain_output
         
-    )
+#     )
 
 
 def get_tool_genesis_location_list(llm, spec, requests):
@@ -213,8 +213,8 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests):
     )
 
 __all__ = [
-    '_get_tool_genesis_sensor_status',
-    '_get_tool_genesis_sensor_list',
+    # '_get_tool_genesis_sensor_status',
+    # '_get_tool_genesis_sensor_list',
     'get_tool_genesis_location_summary',
     'get_tool_genesis_location_list',
     'get_tool_genesis_warehouse_summary'
