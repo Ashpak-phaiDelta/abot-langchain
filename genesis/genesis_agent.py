@@ -29,6 +29,7 @@ from functools import lru_cache
 class GenesisSettings(BaseSettings):
     auth_token: str
     agent_is_verbose: bool = False
+    tool_is_verbose: bool = False
     openapi_file: Union[AnyUrl, FilePath, str] = 'genesis_openapi.yaml'
 
     class Config:
@@ -65,6 +66,10 @@ def get_agent_is_verbose():
     return GenesisSettings().agent_is_verbose
 
 @lru_cache()
+def get_tool_is_verbose():
+    return GenesisSettings().tool_is_verbose
+
+@lru_cache()
 def get_openapi_file():
     return GenesisSettings().openapi_file
 
@@ -87,14 +92,17 @@ def get_genesis_api_agent(llm, *additional_tools):
     # Genesis API specifications (OpenAPI)
     spec = fetch_genesis_spec()
 
+    agent_verbose = get_agent_is_verbose()
+    tool_verbose = get_tool_is_verbose()
+
     # List of tools available to the agent
     genesis_tools = [
         # _get_tool_genesis_sensor_status(llm, spec, requests),
-        get_tool_genesis_sensor_list(llm, spec, requests),
-        get_tool_genesis_location_list(llm, spec, requests),
-        get_tool_genesis_location_summary(llm, spec, requests),
-        get_tool_genesis_warehouse_summary(llm, spec, requests),
-        get_tool_genesis_warehouse_unit_summary(llm, spec, requests),
+        get_tool_genesis_sensor_list(llm, spec, requests, verbose=tool_verbose),
+        get_tool_genesis_location_list(llm, spec, requests, verbose=tool_verbose),
+        get_tool_genesis_location_summary(llm, spec, requests, verbose=tool_verbose),
+        get_tool_genesis_warehouse_summary(llm, spec, requests, verbose=tool_verbose),
+        get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose=tool_verbose),
         *additional_tools
     ]
     
@@ -103,7 +111,7 @@ def get_genesis_api_agent(llm, *additional_tools):
         llm,
         genesis_tools,
         agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
-        verbose=get_agent_is_verbose(),
+        verbose=agent_verbose,
         agent_kwargs=dict(
             prefix=GENESIS_AGENT_PROMPT_PREFIX
         )
