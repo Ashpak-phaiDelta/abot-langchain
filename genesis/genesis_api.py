@@ -188,6 +188,7 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests, verbose: bool = Fals
     return _create_api_tool(
         llm, spec, requests,
         '/metrics/warehouse/{id}',
+        name="Warehouse summary",
         description="""Use to get a summary of all sensors at warehouse-level id, i.e. inside location. (eg: /metrics/warehouse/1). Counter-example: /metrics/warehouse/VER_W1. Input must be a dictionary of parameters as requested. Example: {{"warehouse_id": 1, "original_query": "what the user asked"}}. It can give a list of sensors in the warehouse-level, their values, state, etc. Use it to also get a list of units and their status. i.e. How many sensors in each unit are out of range/normal, or count each sensor's status for the question 'How many sensors are out_of_range?'. You can infer warehouse id from previous input, else ask user to enter warehouse name""",
         verbose=verbose,
         output_processor=process_chain_output
@@ -222,14 +223,12 @@ def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool =
                         sensor_row['State']
                     )
 
-            # TODO warehouse units
-            # response_text_summary += '# Warehouse level units\n'
-
             return response_text_summary
         return _process_request
     return _create_api_tool(
         llm, spec, requests,
         '/metrics/warehouse/{id}',
+        name="Warehouse-level Unit summary",
         description="""Use to get a summary of all unit at warehouse-level id, i.e. inside location. (eg: /metrics/warehouse/1). Counter-example: /metrics/warehouse/VER_W1. Input must be a dictionary of parameters as requested. Example: {{"warehouse_id": 1, "original_query": "what the user asked"}}. It can give a list of unit in the warehouse-level, their values, state, etc. Use it to also get a list of units and their status. i.e. How many unit in each location are out of range/normal,or count each unit's status for the question 'How many units are out_of_range?'. You can infer warehouse id from previous input, else ask user to enter warehouse name""",
         verbose=verbose,
         output_processor=process_chain_output
