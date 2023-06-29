@@ -61,7 +61,7 @@ def get_tool_genesis_sensor_list(llm, spec, requests, verbose: bool = False):
     def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
         def _process_request(original_query: str):
             # TODO Finish this
-            response_data = chain.run()
+            response_data = chain.run({})
 
             data = json.loads(response_data)
             reply = llm(f"List all keys from this json {json.dumps(data[0])}")
