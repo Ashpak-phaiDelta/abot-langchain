@@ -49,8 +49,8 @@ Do NOT make up the ID of warehouse_id, unit_id or sensor_id, but use tool design
 Make sure to display the information in the Final Answer when information is requested, after that give the answer. eg. List of sensors are also to be shown one per line as list items along with the text you will say.
 
 Example:
-Human: How many sensors are there in Cipla at VER_W1?
-AI: use tool to find warehouse_id of VER_W1, then use tool to find unit_id of Cipla inside VER_W1, finally use tool to list and count sensors in the unit_id.
+Human: How many sensors are there in unit XYZ at VER_W1?
+AI: use tool to find warehouse_id of VER_W1, then use tool to find unit_id of XYZ inside VER_W1, finally use tool to list and count sensors in the unit_id.
 
 Make sure to strictly follow "RESPONSE FORMAT INSTRUCTIONS" to produce all output.
 

@@ -6,7 +6,7 @@ from genesis.genesis_agent import get_genesis_api_agent
 
 llm = ChatOpenAI(
     model_name="gpt-3.5-turbo",
-    temperature=0,
+    temperature=0.1,
     max_tokens=512,
     # verbose=True
 )
