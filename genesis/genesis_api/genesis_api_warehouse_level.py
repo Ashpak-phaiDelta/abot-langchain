@@ -17,11 +17,11 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests, verbose: bool = Fals
             original_query: str
             location_id: int
         def warehouse_sensor_summary(query: str) -> str:
-            schema = ParamModel.parse_obj(json.loads(query))
-            params_jsonified = json.dumps({
-                "warehouse_id": schema.location_id
-            })
-            response_data = chain.run(params_jsonified)
+            # schema = ParamModel.parse_obj(json.loads(query))
+            # params_jsonified = json.dumps({
+            #     "warehouse_id": schema.location_id
+            # })
+            response_data = chain.run(query)
             resp_json = json.loads(response_data)
 
             response_text_summary = ''
@@ -74,11 +74,11 @@ def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool =
             original_query: str
             location_id: int
         def warehouse_unit_list_summary(query: str) -> str:
-            schema = ParamModel.parse_obj(json.loads(query))
-            params_jsonified = json.dumps({
-                "warehouse_id": schema.location_id
-            })
-            response_data = chain.run(params_jsonified)
+            # schema = ParamModel.parse_obj(json.loads(query))
+            # params_jsonified = json.dumps({
+            #     "warehouse_id": schema.location_id
+            # })
+            response_data = chain.run(query)
             resp_json = json.loads(response_data)
 
             response_text_summary = ''

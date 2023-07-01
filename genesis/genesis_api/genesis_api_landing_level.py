@@ -16,7 +16,7 @@ def get_tool_genesis_location_summary(llm, spec, requests, verbose: bool = False
         llm, spec, requests,
         '/locations/{warehouse_id}/summary',
         name='location_summary_and_status',
-        description='Can get summary of a location/warehouse id (eg: warehouse_id=1, counter-example: warehouse_id=VER_W1) (ONLY integer, not like VER_W1 or Verna, etc, but MUST be like 1, 2, etc.) such as power, attendance, metrics summary, emergency, etc. Use `location_list_all_location_names` tool to get id first if not known.',
+        description='Can get summary of a location/warehouse id (eg: warehouse_id=1, counter-example: warehouse_id=VER_W1) (ONLY integer, not like VER_W1 or Verna, etc, but MUST be like 1, 2, etc.) such as power, attendance, metrics summary, emergency, etc. Use "location_list_all_location_names" tool to get id first.',
         verbose=verbose
     )
 

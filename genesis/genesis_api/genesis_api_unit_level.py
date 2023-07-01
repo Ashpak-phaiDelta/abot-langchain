@@ -18,12 +18,12 @@ def get_tool_genesis_unit_sensor_list(llm, spec, requests, verbose: bool = False
             location_id: int
             unit_id: int
         def unit_sensor_summary(query: str) -> str:
-            schema = ParamModel.parse_obj(json.loads(query))
-            params_jsonified = json.dumps({
-                "warehouse_id": schema.location_id,
-                "unit_id": schema.unit_id
-            })
-            response_data = chain.run(params_jsonified)
+            # schema = ParamModel.parse_obj(json.loads(query))
+            # params_jsonified = json.dumps({
+            #     "warehouse_id": schema.location_id,
+            #     "unit_id": schema.unit_id
+            # })
+            response_data = chain.run(query)
             resp_json = json.loads(response_data)
 
             response_text_summary = ''
