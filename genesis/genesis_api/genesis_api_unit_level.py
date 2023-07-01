@@ -59,7 +59,8 @@ def get_tool_genesis_unit_sensor_list(llm, spec, requests, verbose: bool = False
         '/metrics/warehouse/{id}/unit/{unit_id}',
         name='unit_sensor_summary',
         description='''Use to get a summary of all sensors at unit-level/location given the `location_id` value. It can give a list of sensors in the unit-level (within a warehouse), count of out_of_range sensors in it, state, etc. eg: 'How many sensors are out_of_range in unit X?'. You can infer `location_id` and `unit_id` from previous input, else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
-{{"original_query": string - The query user had given, "location_id": integer - the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask user for which warehouse, "unit_id": integer - the ID (1,2,etc) of the unit that the user requested. If not known, ask user for which unit within the warehouse and show list of unit names}}''',
+{{"original_query": str - $The query user had given$, "location_id": int - $the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask human for which warehouse$, "unit_id": int - $the ID (1,2,etc) of the unit that the user requested. If not known, ask human for which unit within the warehouse and show list of unit names$}}
+The text between $text$ are instructions for you''',
         verbose=verbose,
         output_processor=process_chain_output
     )

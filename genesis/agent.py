@@ -14,7 +14,7 @@ def make_agent(
         **kwargs) -> AgentExecutor:
     memory = ConversationBufferWindowMemory(
         memory_key="chat_history",
-        k=1
+        k=5
     )
 
     return initialize_agent(

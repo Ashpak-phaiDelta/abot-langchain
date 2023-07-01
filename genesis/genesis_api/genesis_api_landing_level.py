@@ -139,7 +139,8 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests, verbose: bool = Fals
         '/metrics/warehouse/{id}',
         name="warehouse_sensor_summary",
         description='''Use to get a summary of all sensors at warehouse-level/location given the `location_id` value. No unit-level sensors. It can give a list of sensors in the warehouse-level, their values, state, etc. Count each sensor's status for the question 'How many sensors are out_of_range?'. You can infer `location_id` from previous input, else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
-{{"original_query": string - The query user had given, "location_id": integer - the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask user for which warehouse}}''',
+{{"original_query": string - $The query user had given$, "location_id": integer - $the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask human for which warehouse$}}
+The text between $text$ are instructions for you''',
         verbose=verbose,
         output_processor=process_chain_output
     )
@@ -183,7 +184,8 @@ def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool =
         '/metrics/warehouse/{id}',
         name='warehouse_unit_summary',
         description='''Use to get a summary of all units at warehouse-level/location given the `location_id` value. It can give a list of units in the warehouse-level, count of out_of_range sensors in it, state, etc. eg: 'How many sensors are out_of_range in unit X?'. You can infer `location_id` from previous input, else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
-{{"original_query": string - The query user had given, "location_id": integer - the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask user for which warehouse}}''',
+{{"original_query": string - $The query user had given$, "location_id": integer - $the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask human for which warehouse$}}
+The text between $text$ are instructions for you''',
         verbose=verbose,
         output_processor=process_chain_output
     )
