@@ -61,8 +61,8 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests, verbose: bool = Fals
         llm, spec, requests,
         '/metrics/warehouse/{warehouse_id}',
         name="warehouse_sensor_summary",
-        description='''Use to get a summary of all sensors at warehouse-level/location given the `location_id` value. No unit-level sensors. It can give a list of sensors in the warehouse-level, their ID, their values, state, etc. Count each sensor's status for the question 'How many sensors are out_of_range?'. You can infer `location_id` from tool "location_list_all_location_names", else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
-{{"original_query": str - $The query user had given$, "location_id": int - $the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask human for which warehouse. Make SURE location_id is correct before using$}}
+        description='''Use to get a summary of all sensors at warehouse-level/location given the `location_id` value. Can be use to search a sensor from name. No unit-level sensors. It can give a list of sensors in the warehouse-level, their ID, their values, state, etc. Count each sensor's status for the question 'How many sensors are out_of_range?'. You can infer `location_id` from tool "location_list_all_location_names", else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
+{{"original_query": str - $The query user had given$, "location_id": int - $the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask human for which warehouse. Make SURE location_id is correct data type and value before using$}}
 The text between $text$ are instructions for you''',
         verbose=verbose,
         output_processor=process_chain_output

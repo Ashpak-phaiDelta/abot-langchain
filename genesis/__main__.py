@@ -23,7 +23,7 @@ def read_input():
 
 llm = ChatOpenAI(
     model_name="gpt-3.5-turbo",
-    temperature=0,
+    temperature=0.7,
     max_tokens=512,
     # verbose=True
 )
@@ -34,15 +34,15 @@ tools = [
     # make_genesis_tool(llm)
 ]
 
-tools.extend(
-    load_tools(
-        [
-            "human" # Human-input
-        ],
-        llm=llm,
-        input_func=read_input
-    )
-)
+# tools.extend(
+#     load_tools(
+#         [
+#             "human" # Human-input
+#         ],
+#         llm=llm,
+#         input_func=read_input
+#     )
+# )
 
 if __name__ == '__main__':
     agent = get_genesis_api_agent(llm, *tools)#make_agent(llm, tools)
