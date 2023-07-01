@@ -23,8 +23,11 @@ def get_tool_genesis_unit_sensor_list(llm, spec, requests, verbose: bool = False
             #     "warehouse_id": schema.location_id,
             #     "unit_id": schema.unit_id
             # })
-            response_data = chain.run(query)
-            resp_json = json.loads(response_data)
+            try:
+                response_data = chain.run(query)
+                resp_json = json.loads(response_data)
+            except:
+                return 'Error making request. Try again in some time.'
 
             response_text_summary = ''
             

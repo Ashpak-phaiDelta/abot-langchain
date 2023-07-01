@@ -21,8 +21,11 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests, verbose: bool = Fals
             # params_jsonified = json.dumps({
             #     "warehouse_id": schema.location_id
             # })
-            response_data = chain.run(query)
-            resp_json = json.loads(response_data)
+            try:
+                response_data = chain.run(query)
+                resp_json = json.loads(response_data)
+            except:
+                return 'Error making request. Try again in some time.'
 
             response_text_summary = ''
 
@@ -78,8 +81,11 @@ def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool =
             # params_jsonified = json.dumps({
             #     "warehouse_id": schema.location_id
             # })
-            response_data = chain.run(query)
-            resp_json = json.loads(response_data)
+            try:
+                response_data = chain.run(query)
+                resp_json = json.loads(response_data)
+            except:
+                return 'Error making request. Try again in some time.'
 
             response_text_summary = ''
             
