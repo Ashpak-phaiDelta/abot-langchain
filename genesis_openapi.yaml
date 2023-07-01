@@ -42,14 +42,14 @@ paths:
                       type: string
                       example: NORMAL
 
-  /locations/{id}/summary:
+  /locations/{warehouse_id}/summary:
     get:
       summary: General warehouse summary
       description: Get summary of warehouse id such as sensors out-of-range, power value, emergencies, etc.
       operationId: LocationSummary
       parameters:
         - in: path
-          name: id
+          name: warehouse_id
           schema:
             type: integer
           required: true
@@ -91,14 +91,14 @@ paths:
                         type: number
                       unit:
                         type: string
-  /metrics/warehouse/{id}:
+  /metrics/warehouse/{warehouse_id}:
     get:
       summary: Warehouse and unit detailed summary
       description: Get warehouse sensors details (wv_warehouse_metrics) and warehouse-level unit details (wv_unit_summary)
       operationId: WarehouseDetails
       parameters:
         - in: path
-          name: id
+          name: warehouse_id
           schema:
             type: integer
           required: true
@@ -175,14 +175,14 @@ paths:
                             - type: string
                             - type: number
                           nullable: true
-  /metrics/warehouse/{id}/unit/{unit_id}:
+  /metrics/warehouse/{warehouse_id}/unit/{unit_id}:
     get:
       summary: Warehouse and unit detailed summary
       description: Get unit sensors details (uv_unit_metrics)
       operationId: UnitDetails
       parameters:
         - in: path
-          name: id
+          name: warehouse_id
           schema:
             type: integer
           required: true

@@ -86,7 +86,7 @@ def get_tool_genesis_location_list(llm, spec, requests, verbose: bool = False):
 def get_tool_genesis_location_summary(llm, spec, requests, verbose: bool = False):
     return create_api_tool(
         llm, spec, requests,
-        '/locations/{id}/summary',
+        '/locations/{warehouse_id}/summary',
         name='location_summary_and_status',
         description='Can get summary of a location/warehouse id (eg: id=1, counter-example: id=VER_W1) (ONLY integer, not like VER_W1 or Verna, etc, but MUST be like 1, 2, etc.) such as power, attendance, metrics summary, emergency, etc. Use `location_list_all_location_names` tool to get id first if not known.',
         verbose=verbose
@@ -136,7 +136,7 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests, verbose: bool = Fals
         return warehouse_sensor_summary
     return create_api_tool(
         llm, spec, requests,
-        '/metrics/warehouse/{id}',
+        '/metrics/warehouse/{warehouse_id}',
         name="warehouse_sensor_summary",
         description='''Use to get a summary of all sensors at warehouse-level/location given the `location_id` value. No unit-level sensors. It can give a list of sensors in the warehouse-level, their values, state, etc. Count each sensor's status for the question 'How many sensors are out_of_range?'. You can infer `location_id` from previous input, else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
 {{"original_query": string - $The query user had given$, "location_id": integer - $the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask human for which warehouse$}}
@@ -181,7 +181,7 @@ def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool =
         return warehouse_unit_summary
     return create_api_tool(
         llm, spec, requests,
-        '/metrics/warehouse/{id}',
+        '/metrics/warehouse/{warehouse_id}',
         name='warehouse_unit_summary',
         description='''Use to get a summary of all units at warehouse-level/location given the `location_id` value. It can give a list of units in the warehouse-level, count of out_of_range sensors in it, state, etc. eg: 'How many sensors are out_of_range in unit X?'. You can infer `location_id` from previous input, else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
 {{"original_query": string - $The query user had given$, "location_id": integer - $the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask human for which warehouse$}}
