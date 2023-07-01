@@ -28,6 +28,12 @@ llm = ChatOpenAI(
     # verbose=True
 )
 
+llm_tool = OpenAI(
+    temperature=0.1,
+    max_tokens=512,
+    # verbose=True
+)
+
 
 tools = [
     # Genesis integration
@@ -45,7 +51,7 @@ tools = [
 # )
 
 if __name__ == '__main__':
-    agent = get_genesis_api_agent(llm, *tools)#make_agent(llm, tools)
+    agent = get_genesis_api_agent(llm, *tools, llm_for_tool=llm_tool)#make_agent(llm, tools)
 
     try:
         # REPL
