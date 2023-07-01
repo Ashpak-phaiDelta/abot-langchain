@@ -10,7 +10,7 @@ def _fixed_derive_fields(language_app):
         return language_app.input_variables, language_app.output_variables
     elif hasattr(language_app, "prompt"):
         return language_app.prompt.input_variables, [language_app.output_key]
-    return language_app.input_keys, language_app.output_keys
+    return [x for x in language_app.input_keys if x != 'chat_history'], language_app.output_keys
 
 setattr(lcorn_api, 'derive_fields', _fixed_derive_fields)
 
