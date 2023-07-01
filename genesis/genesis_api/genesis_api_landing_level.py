@@ -161,9 +161,9 @@ def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool =
             response_text_summary = ''
             
             response_text_summary += '# Warehouse-level units\n'
-            warlvl_sensors = resp_json['wv_unit_summary']
+            warlvl_units = resp_json['wv_unit_summary']
 
-            warlvl_df = pd.DataFrame(warlvl_sensors)
+            warlvl_df = pd.DataFrame(warlvl_units)
 
             response_text_summary += "> Data format: Name (alias): Out-count: Status\n"
 
