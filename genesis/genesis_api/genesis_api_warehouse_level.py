@@ -30,6 +30,8 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests, verbose: bool = Fals
             warlvl_sensors = resp_json['wv_warehouse_metrics']
 
             warlvl_df = pd.DataFrame(warlvl_sensors)
+            if len(warlvl_df) == 0:
+                return 'No sensors are present in this warehouse'
 
             response_text_summary += "Level info: ## is Sensor type, ### is Sensor subtype\n"
             response_text_summary += "Sensor data format: Sensor ID // Name // Value // Status\n"
@@ -59,7 +61,7 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests, verbose: bool = Fals
         llm, spec, requests,
         '/metrics/warehouse/{warehouse_id}',
         name="warehouse_sensor_summary",
-        description='''Use to get a summary of all sensors at warehouse-level/location given the `location_id` value. No unit-level sensors. It can give a list of sensors in the warehouse-level, their ID, their values, state, etc. Count each sensor's status for the question 'How many sensors are out_of_range?'. You can infer `location_id` from previous input, else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
+        description='''Use to get a summary of all sensors at warehouse-level/location given the `location_id` value. No unit-level sensors. It can give a list of sensors in the warehouse-level, their ID, their values, state, etc. Count each sensor's status for the question 'How many sensors are out_of_range?'. You can infer `location_id` from tool "location_list_all_location_names", else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
 {{"original_query": str - $The query user had given$, "location_id": int - $the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask human for which warehouse. Make SURE location_id is correct before using$}}
 The text between $text$ are instructions for you''',
         verbose=verbose,
@@ -71,7 +73,7 @@ def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool =
         class ParamModel(BaseModel):
             original_query: str
             location_id: int
-        def warehouse_unit_summary(query: str) -> str:
+        def warehouse_unit_list_summary(query: str) -> str:
             schema = ParamModel.parse_obj(json.loads(query))
             params_jsonified = json.dumps({
                 "warehouse_id": schema.location_id
@@ -85,6 +87,9 @@ def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool =
             warlvl_sensors = resp_json['wv_unit_summary']
 
             warlvl_df = pd.DataFrame(warlvl_sensors)
+
+            if len(warlvl_df) == 0:
+                return 'No units are present in this warehouse'
 
             response_text_summary += "> Data format: Unit ID // Name (alias) // Number of out_of_range sensors // Status\n"
 
@@ -100,12 +105,12 @@ def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool =
                 )
 
             return response_text_summary
-        return warehouse_unit_summary
+        return warehouse_unit_list_summary
     return create_api_tool(
         llm, spec, requests,
         '/metrics/warehouse/{warehouse_id}',
-        name='warehouse_unit_summary',
-        description='''Use to get a summary of all units at warehouse-level/location given the `location_id` value. For a list of sensors, use a different tool. It can give a list of units in the warehouse-level, their unit id, count of out_of_range sensors in it, state, etc. eg: 'How many sensors are out_of_range in unit X?'. You can infer `location_id` from previous input, else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
+        name='warehouse_unit_list_summary',
+        description='''Use to get a summary of all units at warehouse-level/location given the `location_id` value. For a list of sensors, use a different tool. It can give a list of units in the warehouse-level, their unit id, count of out_of_range sensors in it, state, etc. eg: 'How many sensors are out_of_range in unit X?'. You can infer `location_id` from tool "location_list_all_location_names", else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
 {{"original_query": str - $the query user_had given$, "location_id": int - $the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask human for which warehouse. Make SURE location_id is correct before using by fetching$}}
 The text between $text$ are instructions for you''',
         verbose=verbose,

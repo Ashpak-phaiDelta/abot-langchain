@@ -1,12 +1,14 @@
 
-from langchain.llms import OpenAI
+from langchain.chat_models import ChatOpenAI
 
 from genesis.genesis_agent import get_genesis_api_agent
 
 
-llm = OpenAI(
+llm = ChatOpenAI(
+    model_name="gpt-3.5-turbo",
     temperature=0,
-    max_tokens=512
+    max_tokens=512,
+    # verbose=True
 )
 
 agent_chain = get_genesis_api_agent(llm)

@@ -3,6 +3,7 @@ import traceback
 from langchain.llms import OpenAI
 from langchain.chat_models import ChatOpenAI
 from langchain.agents import load_tools
+from langchain.memory import ConversationBufferWindowMemory, ChatMessageHistory, ConversationSummaryBufferMemory
 
 from .agent import make_agent
 from .genesis_agent import make_genesis_tool, get_genesis_api_agent
@@ -20,8 +21,9 @@ def read_input():
             return inpt
 
 
-llm = OpenAI(
-    temperature=0.1,
+llm = ChatOpenAI(
+    model_name="gpt-3.5-turbo",
+    temperature=0,
     max_tokens=512,
     # verbose=True
 )

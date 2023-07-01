@@ -1,6 +1,6 @@
 
 from langchain.agents import AgentType, AgentExecutor, initialize_agent
-from langchain.memory import ConversationBufferWindowMemory
+from langchain.memory import ConversationBufferWindowMemory, ChatMessageHistory, ConversationSummaryBufferMemory
 from langchain.base_language import BaseLanguageModel
 from langchain.agents.tools import BaseTool
 
@@ -12,9 +12,11 @@ def make_agent(
         tools: List[BaseTool],
         agent: AgentType = AgentType.CONVERSATIONAL_REACT_DESCRIPTION,
         **kwargs) -> AgentExecutor:
-    memory = ConversationBufferWindowMemory(
+
+    memory = ConversationSummaryBufferMemory(
+        llm=llm,
         memory_key="chat_history",
-        k=5
+        return_messages=True,
     )
 
     return initialize_agent(
