@@ -12,6 +12,7 @@ from langchain.tools.openapi.utils.api_models import APIOperation
 from langchain.chains.api.openapi.chain import OpenAPIEndpointChain
 from langchain.tools.openapi.utils.openapi_utils import OpenAPISpec
 
+from pydantic import BaseModel
 from typing import Optional, Callable
 
 
@@ -32,20 +33,22 @@ def _create_api_tool(llm: BaseLanguageModel,
         requests=requests,
         verbose=verbose,
         return_intermediate_steps=False,
-        raw_response=not auto_parse_output_using_llm
+        raw_response=not auto_parse_output_using_llm,
     )
 
     if output_processor is not None:
-        return StructuredTool.from_function(
+        return Tool.from_function(
             func=output_processor(chain),
             name=name or api_operation.operation_id,
-            description=description or api_operation.description
+            description=description or api_operation.description,
+            verbose=verbose
         )
 
     return Tool(
         name=name or api_operation.operation_id,
         description=description or api_operation.description,
-        func=chain.run
+        func=chain.run,
+        verbose=verbose
     )
 
 # Old, from fulfillment
@@ -124,8 +127,8 @@ def get_tool_genesis_location_list(llm, spec, requests, verbose: bool = False):
     return _create_api_tool(
         llm, spec, requests,
         '/locations',
-        name='location_list_to_get_location_id',
-        description='Use to get a list of all locations/warehouses, their `id` (integer for use in summary), name and status of the location (normal, out_of_range, etc). Use it to find location ID given its name by filtering it. The ID can be used for other operations that need it. This tool can be used to get ID for other tools. Output MUST be in JSON format as {{"required keys": "their values but as string"}}',
+        name='location_list_all_location_names',
+        description='Use to get a list of all locations/warehouses, their `id` (integer for use in summary), name and status of the location (normal, out_of_range, etc). Use it to find location ID given its name by filtering it. The ID can be used for other operations that need it. This tool can be used to get ID for other tools. This tool requires no input parameters, but an empty "" string.',
         verbose=verbose,
     )
 
@@ -133,23 +136,27 @@ def get_tool_genesis_location_summary(llm, spec, requests, verbose: bool = False
     return _create_api_tool(
         llm, spec, requests,
         '/locations/{id}/summary',
-        name='location_summary_id_integer',
-        description='Can get summary of a location/warehouse id (eg: /locations/1/summary) (counter-example: /locations/VER_W1/summary) (ONLY integer, not like VER_W1 or Verna, etc, but MUST be like 1, 2, etc.) such as power, attendance, metrics summary, emergency, etc. Use `location_list_to_get_location_id` tool to get id first',
+        name='location_summary_and_status',
+        description='Can get summary of a location/warehouse id (eg: id=1, counter-example: id=VER_W1) (ONLY integer, not like VER_W1 or Verna, etc, but MUST be like 1, 2, etc.) such as power, attendance, metrics summary, emergency, etc. Use `location_list_all_location_names` tool to get id first if not known.',
         verbose=verbose
     )
 
 
 def get_tool_genesis_warehouse_summary(llm, spec, requests, verbose: bool = False):
     def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
-        def _process_request(original_query: str, warehouse_id: int):
+        class ParamModel(BaseModel):
+            original_query: str
+            location_id: int
+        def warehouse_sensor_summary(query: str) -> str:
+            schema = ParamModel.parse_obj(json.loads(query))
             params_jsonified = json.dumps({
-                "warehouse_id": warehouse_id
+                "warehouse_id": schema.location_id
             })
             response_data = chain.run(params_jsonified)
             resp_json = json.loads(response_data)
 
             response_text_summary = ''
-            
+
             response_text_summary += '# Warehouse level sensors\n'
             warlvl_sensors = resp_json['wv_warehouse_metrics']
 
@@ -163,77 +170,75 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests, verbose: bool = Fals
                 for metric_subtype_name, df_mst in df_mt.groupby('Metric Sub-Type'):
                     response_text_summary += "### %s\n" % metric_subtype_name
                     for lbl, sensor_row in df_mst.iterrows():
-                        response_text_summary += '{}: {} {}: {}\n'.format(
+                        val = sensor_row['Value'] or ''
+                        if sensor_row['Unit'] is not None:
+                            val += ' ' + sensor_row['Unit']
+                        if sensor_row['Value Duration Minutes'] is not None:
+                            val += '(for %s)' % sensor_row['Value Duration Minutes']
+                        response_text_summary += '{}: {}: {}\n'.format(
                             sensor_row['Sensor Name'],
-                            sensor_row['Value'],
-                            sensor_row['Unit'] or '',
+                            val,
                             sensor_row['State']
                         )
 
             # TODO warehouse units
             # response_text_summary += '# Warehouse level units\n'
-            
-            # print("processor output")
-            # print('--------')
-            # print(":::Parameters:::")
-            # print(params_jsonified)
-            # print(':::Query:::')
-            # print(original_query)
-            # print(':::Response:::')
-            # print(response_data)
-            # print('--------')
-            
+
             return response_text_summary
-        return _process_request
+        return warehouse_sensor_summary
     return _create_api_tool(
         llm, spec, requests,
         '/metrics/warehouse/{id}',
-        name="Warehouse summary",
-        description="""Use to get a summary of all sensors at warehouse-level id, i.e. inside location. (eg: /metrics/warehouse/1). Counter-example: /metrics/warehouse/VER_W1. Input must be a dictionary of parameters as requested. Example: {{"warehouse_id": 1, "original_query": "what the user asked"}}. It can give a list of sensors in the warehouse-level, their values, state, etc. Use it to also get a list of units and their status. i.e. How many sensors in each unit are out of range/normal, or count each sensor's status for the question 'How many sensors are out_of_range?'. You can infer warehouse id from previous input, else ask user to enter warehouse name""",
+        name="warehouse_sensor_summary",
+        description='''Use to get a summary of all sensors at warehouse-level/location given the `location_id` value. No unit-level sensors. It can give a list of sensors in the warehouse-level, their values, state, etc. Count each sensor's status for the question 'How many sensors are out_of_range?'. You can infer `location_id` from previous input, else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
+{{"original_query": string - The query user had given, "location_id": integer - the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask user for which warehouse}}''',
         verbose=verbose,
         output_processor=process_chain_output
     )
 
 def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool = False):
     def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
-        def _process_request(original_query: str, warehouse_id: int):
+        class ParamModel(BaseModel):
+            original_query: str
+            location_id: int
+        def warehouse_unit_summary(query: str) -> str:
+            schema = ParamModel.parse_obj(json.loads(query))
             params_jsonified = json.dumps({
-                "warehouse_id": warehouse_id
+                "warehouse_id": schema.location_id
             })
             response_data = chain.run(params_jsonified)
             resp_json = json.loads(response_data)
 
             response_text_summary = ''
             
-            response_text_summary += '# Warehouse level unit\n'
+            response_text_summary += '# Warehouse-level units\n'
             warlvl_sensors = resp_json['wv_unit_summary']
 
             warlvl_df = pd.DataFrame(warlvl_sensors)
 
-            response_text_summary += "Level info: ## is Sensor type, ### is Sensor subtype\n"
-            response_text_summary += "Sensor data format: Name: Value: Status\n"
+            response_text_summary += "> Data format: Name (alias): Out-count: Status\n"
 
-            for location_name, df_mt in warlvl_df.groupby('Location Name'):
-                response_text_summary += "## %s\n" % location_name
-                for lbl, sensor_row in df_mt.iterrows():
-                    response_text_summary += '{}: {} {}: {}\n'.format(
-                        sensor_row['Unit Name'],
-                        sensor_row['Value'],
-                        sensor_row['Location Name'] or '',
-                        sensor_row['State']
-                    )
+            for lbl, unit_row in warlvl_df.iterrows():
+                name = unit_row['Unit Name'] or ''
+                if unit_row['Unit Alias'] is not None:
+                    name += '(%s)' % unit_row['Unit Alias']
+                response_text_summary += '{}: {}: {}\n'.format(
+                    name,
+                    unit_row['Value'],
+                    unit_row['State']
+                )
 
             return response_text_summary
-        return _process_request
+        return warehouse_unit_summary
     return _create_api_tool(
         llm, spec, requests,
         '/metrics/warehouse/{id}',
-        name="Warehouse-level Unit summary",
-        description="""Use to get a summary of all unit at warehouse-level id, i.e. inside location. (eg: /metrics/warehouse/1). Counter-example: /metrics/warehouse/VER_W1. Input must be a dictionary of parameters as requested. Example: {{"warehouse_id": 1, "original_query": "what the user asked"}}. It can give a list of unit in the warehouse-level, their values, state, etc. Use it to also get a list of units and their status. i.e. How many unit in each location are out of range/normal,or count each unit's status for the question 'How many units are out_of_range?'. You can infer warehouse id from previous input, else ask user to enter warehouse name""",
+        name='warehouse_unit_summary',
+        description='''Use to get a summary of all units at warehouse-level/location given the `location_id` value. It can give a list of units in the warehouse-level, count of out_of_range sensors in it, state, etc. eg: 'How many sensors are out_of_range in unit X?'. You can infer `location_id` from previous input, else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
+{{"original_query": string - The query user had given, "location_id": integer - the ID (1,2,etc) of the location/warehouse that the user requested. If not known, ask user for which warehouse}}''',
         verbose=verbose,
         output_processor=process_chain_output
     )
-
 
 
 __all__ = [

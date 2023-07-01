@@ -15,13 +15,13 @@ load_dotenv()
 def read_input():
     '''Simple prompt for user to enter input for asking'''
     while True:
-        inpt = input('> ')
+        inpt = 'How long is the Off - Lift Side Door closed?' # input('> ')
         if len(inpt) > 0:
             return inpt
 
 
 llm = OpenAI(
-    temperature=0,
+    temperature=0.1,
     max_tokens=512,
     # verbose=True
 )
@@ -52,6 +52,6 @@ if __name__ == '__main__':
     except (KeyboardInterrupt, EOFError):
         # Quit gracefully
         pass
-    except Exception:
-        print("There was an error executing that action.")
-        traceback.print_exc()
+    # except Exception:
+    #     print("There was an error executing that action.")
+    #     traceback.print_exc()
