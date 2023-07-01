@@ -134,7 +134,7 @@ paths:
                         "State":
                           type: string
                         "Threshold crosses":
-                          type: string
+                          type: number
                           nullable: true
                         "Unit":
                           type: string
@@ -171,6 +171,74 @@ paths:
                         "Unit Name":
                           type: string
                         "Value":
+                          oneOf:
+                            - type: string
+                            - type: number
+                          nullable: true
+  /metrics/warehouse/{id}/unit/{unit_id}:
+    get:
+      summary: Warehouse and unit detailed summary
+      description: Get unit sensors details (uv_unit_metrics)
+      operationId: UnitDetails
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+        - in: path
+          name: unit_id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uv_unit_metrics:
+                    type: array
+                    description: Unit metrics
+                    items:
+                      type: object
+                      properties:
+                        "Location Alias":
+                          type: string
+                        "Location Name":
+                          type: string
+                        "Metric Sub-Type":
+                          type: string
+                        "Metric Type":
+                          type: string
+                        "Percentage":
+                          type: string
+                          nullable: true
+                        "Sensor Alias":
+                          type: string
+                        "Sensor Id":
+                          type: integer
+                        "Sensor Name":
+                          type: string
+                        "State":
+                          type: string
+                        "Threshold crosses":
+                          type: number
+                          nullable: true
+                        "Unit":
+                          type: string
+                        "Unit Alias":
+                          type: string
+                        "Unit Name":
+                          type: string
+                        "Value":
+                          oneOf:
+                            - type: string
+                            - type: number
+                          nullable: true
+                        "Value Duration Minutes":
                           oneOf:
                             - type: string
                             - type: number

@@ -51,51 +51,6 @@ TOOLS:
 
 Assistant has access to the following tools: """
 
-GENESIS_AGENT_PROMPT_FORMAT_INSTRUCTIONS = """Use a json blob to specify a tool by providing an action key (tool name) and an action_input key (tool input).
-
-Valid "action" values: "Final Answer" or {tool_names}
-
-Provide only ONE action per $JSON_BLOB, as shown:
-
-```
-{{{{
-  "action": $TOOL_NAME,
-  "action_input": $INPUT
-}}}}
-```
-
-$JSON_BLOB should be only a valid JSON object (comma delimited). Dont include any other text or explanation.
-
-$INPUT MUST be a valid JSON object (comma delimited) containing key-value for each argument. Eg: {{{{"arg1name": arg1value, "arg2name": "arg2value"}}}}
-It must not be any other data type than a dict. It MUST NOT be int, float, etc.
-
-```
-{{{{
-  "action": "tool1",
-  "action_input": {{{{"arg1": 1, "arg2": "str"}}}}
-}}}}
-```
-is valid.
-
-Follow this format:
-
-Question: input question to answer
-Thought: consider previous and subsequent steps
-Action:
-```
-$JSON_BLOB
-```
-Observation: action result
-... (repeat Thought/Action/Observation N times)
-Thought: I know what to respond
-Action:
-```
-{{{{
-  "action": "Final Answer",
-  "action_input": "Final response to human"
-}}}}
-```"""
-
 
 GENESIS_TOOL_DESCRIPTION = "An IoT platform, Genesis is the product that can help users gather information about Sensors, locations such as warehouses and buildings, analytics, and status of the Sensors and locations themselves. Use this tool when any request to sensors, units/locations or warehouses is asked. Also used when followup questions or actions are asked. If an error occurs or sensor is not found, inform user about the error. Users are not aware of sensor IDs and mostly use names/aliases"
 
@@ -148,6 +103,7 @@ def get_genesis_api_agent(llm, *additional_tools):
         get_tool_genesis_location_summary(llm, spec, requests, verbose=tool_verbose),
         get_tool_genesis_warehouse_summary(llm, spec, requests, verbose=tool_verbose),
         get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose=tool_verbose),
+        get_tool_genesis_unit_sensor_list(llm, spec, requests, verbose=tool_verbose),
         *additional_tools
     ]
     

@@ -2,62 +2,13 @@
 import json
 import pandas as pd
 
-from langchain.chains import OpenAPIEndpointChain, LLMChain
-from langchain.chains.base import Chain
-from langchain.base_language import BaseLanguageModel
-from langchain.requests import Requests
-from langchain.tools.base import Tool, StructuredTool
-from langchain.prompts import PromptTemplate
-from langchain.tools.openapi.utils.api_models import APIOperation
+from .base import create_api_tool
+
+from langchain.chains import OpenAPIEndpointChain
 from langchain.chains.api.openapi.chain import OpenAPIEndpointChain
-from langchain.tools.openapi.utils.openapi_utils import OpenAPISpec
 
 from pydantic import BaseModel
-from typing import Optional, Callable
-
-
-def _create_api_tool(llm: BaseLanguageModel,
-                     spec: OpenAPISpec,
-                     requests: Requests,
-                     endpoint: str,
-                     method: str = 'get',
-                     name: Optional[str] = None,
-                     description: Optional[str] = None,
-                     verbose: bool = False,
-                     auto_parse_output_using_llm: bool = False,
-                     output_processor: Optional[Callable[[Chain], Callable[..., str]]] = None):
-    api_operation = APIOperation.from_openapi_spec(spec, endpoint, method)
-    chain = OpenAPIEndpointChain.from_api_operation(
-        api_operation,
-        llm,
-        requests=requests,
-        verbose=verbose,
-        return_intermediate_steps=False,
-        raw_response=not auto_parse_output_using_llm,
-    )
-
-    if output_processor is not None:
-        return Tool.from_function(
-            func=output_processor(chain),
-            name=name or api_operation.operation_id,
-            description=description or api_operation.description,
-            verbose=verbose
-        )
-
-    return Tool(
-        name=name or api_operation.operation_id,
-        description=description or api_operation.description,
-        func=chain.run,
-        verbose=verbose
-    )
-
-# Old, from fulfillment
-# def _get_tool_genesis_sensor_status(llm, spec, requests):
-#     return _create_api_tool(
-#         llm, spec, requests,
-#         '/genesis/query/sensor',
-#         description='Use to get sensor details, metadata, status and location information from given sensor ID. Do not use if sensor type or name is given, use another tool. Do not make up an answer if this tool fails.'
-#     )
+from typing import Callable
 
 
 def get_tool_genesis_sensor_list(llm, spec, requests, verbose: bool = False):
@@ -113,7 +64,7 @@ def get_tool_genesis_sensor_list(llm, spec, requests, verbose: bool = False):
 
             return context
         return _process_request
-    return _create_api_tool(
+    return create_api_tool(
         llm, spec, requests,
         '/sensors',
         name='sensor_list_to_get_sensor_id',
@@ -124,7 +75,7 @@ def get_tool_genesis_sensor_list(llm, spec, requests, verbose: bool = False):
 
 
 def get_tool_genesis_location_list(llm, spec, requests, verbose: bool = False):
-    return _create_api_tool(
+    return create_api_tool(
         llm, spec, requests,
         '/locations',
         name='location_list_all_location_names',
@@ -133,7 +84,7 @@ def get_tool_genesis_location_list(llm, spec, requests, verbose: bool = False):
     )
 
 def get_tool_genesis_location_summary(llm, spec, requests, verbose: bool = False):
-    return _create_api_tool(
+    return create_api_tool(
         llm, spec, requests,
         '/locations/{id}/summary',
         name='location_summary_and_status',
@@ -181,12 +132,9 @@ def get_tool_genesis_warehouse_summary(llm, spec, requests, verbose: bool = Fals
                             sensor_row['State']
                         )
 
-            # TODO warehouse units
-            # response_text_summary += '# Warehouse level units\n'
-
             return response_text_summary
         return warehouse_sensor_summary
-    return _create_api_tool(
+    return create_api_tool(
         llm, spec, requests,
         '/metrics/warehouse/{id}',
         name="warehouse_sensor_summary",
@@ -230,7 +178,7 @@ def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool =
 
             return response_text_summary
         return warehouse_unit_summary
-    return _create_api_tool(
+    return create_api_tool(
         llm, spec, requests,
         '/metrics/warehouse/{id}',
         name='warehouse_unit_summary',
@@ -242,10 +190,6 @@ def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool =
 
 
 __all__ = [
-    # '_get_tool_genesis_sensor_status',
-    'get_tool_genesis_sensor_list',
     'get_tool_genesis_location_summary',
-    'get_tool_genesis_location_list',
-    'get_tool_genesis_warehouse_summary',
-    'get_tool_genesis_warehouse_unit_summary'
+    'get_tool_genesis_location_list'
 ]
