@@ -6,7 +6,7 @@ from langchain.llms.openai import OpenAI
 from doc_db import db
 
 
-TARGET_SOURCE_CHUNKS = 10
+TARGET_SOURCE_CHUNKS = 8
 
 llm = OpenAI()
 

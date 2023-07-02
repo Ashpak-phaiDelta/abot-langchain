@@ -1,12 +1,20 @@
 
 from langchain.chains.base import Chain
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
+import time
+import enum
 import gradio as gr
-from threading import Lock
+import asyncio
 from dotenv import load_dotenv
+from concurrent.futures.thread import ThreadPoolExecutor
 
 load_dotenv()
+
+
+class LLMOutputMode(str, enum.Enum):
+    DIRECT = "direct"
+    STREAM = "stream"
 
 
 def load_chain_from_module(chain_path: str):
@@ -36,76 +44,119 @@ def handle_upload(file):
     ingest = reload(ingest)
     ingest.upload_file(file)
 
+
+def run_chain_sync(q: asyncio.Queue, chain: Chain, input: str):
+    # TODO: Custom callback class to append to queue
+    result = chain(input, callbacks=[])
+    # for s in msg:
+    #     time.sleep(1)
+    #     q.put_nowait(s)
+    return result[chain.output_keys[0]]
+
 class ChatWrapper:
     def __init__(self):
-        self.lock = Lock()
-    def __call__(
+        self._lock = asyncio.Lock()
+        self._exec = ThreadPoolExecutor(2)
+
+    async def prepare(self, user_message: str, history, chain_path: str, loaded_chain: Optional[Chain]):
+        if loaded_chain is None:
+            if not chain_path:
+                raise ValueError("Provide path to the chain object")
+            raise TimeoutError("Chain is still loading. Please try again in a bit.")
+
+        if self._lock.locked():
+            raise RuntimeError("A chat operation is still in progress. Please wait till it finishes.")
+
+        user_message = user_message.strip()
+        if len(user_message) > 0:
+            async with self._lock:
+                new_message_pair = [user_message, None]
+                history.append(new_message_pair)
+        return history, user_message
+
+    async def generate(
         self,
-        inp: str,
-        history: Optional[Tuple[str, str]],
-        chain: Optional[Chain],
-        tb_chain_path: Optional[str]
-    ):
-        """Execute the chat functionality."""
-        self.lock.acquire()
-        try:
-            history = history or []
-            # If chain is None, that is because no API key was provided.
-            if chain is None:
-                if not tb_chain_path:
-                    history.append((inp, "Provide path to the chain object"))
-                    return history, history
-                
-                history.append((inp, "Chain is still loading. Please try again in a bit."))
-                return history, history
+        user_message: str,
+        history,
+        mode: LLMOutputMode,
+        chain: Chain
+        ):
+        chat_idx = -1
+        chat_output = history[chat_idx]
 
-            # Run chain and append input.
-            output = chain(inp)
-            history.append((inp, output[chain.output_keys[0]]))
-        except Exception as e:
-            raise e
-        finally:
-            self.lock.release()
-        return history, history
+        if len(user_message) == 0:
+            yield history
+            return
 
-chat = ChatWrapper()
+        # Hold lock till done
+        async with self._lock:
+            llm_args = [chain, user_message]
 
-with gr.Blocks() as demo:
+            output_queue = asyncio.Queue()
+            output_task = asyncio.get_running_loop().run_in_executor(
+                self._exec, run_chain_sync, output_queue, *llm_args)
+
+            if mode == LLMOutputMode.DIRECT:
+                chat_output[1] = "Generating..."
+                yield history
+                chat_output[1] = await output_task
+                yield history
+            elif mode == LLMOutputMode.STREAM:
+                fail_count = 0
+                chat_output[1] = ""
+                while (not output_task.done()) and fail_count < 3:
+                    try:
+                        tok = await asyncio.wait_for(output_queue.get(), timeout=2)
+                        chat_output[1] += tok
+                        yield history
+                    except (asyncio.CancelledError, asyncio.QueueEmpty):
+                        fail_count += 1
+                    else:
+                        fail_count = 0
+                chat_output[1] = await output_task
+                yield history
+            else:
+                yield history
+                return
+
+with gr.Blocks().queue(20) as demo:
     with gr.Row(equal_height=False):
-        gr.Markdown("### PrivateGPT Demo")
+        gr.Markdown("# PrivateGPT Demo")
 
         with gr.Row():
-            reload_chain_btn = gr.Button("Reload chain")
+            reload_chain_btn = gr.Button("Reload chain", size='sm')
             tb_chain_path = gr.Textbox(
                 placeholder="Path to the chain module",
                 show_label=False,
                 lines=1,
                 type="text",
-                scale=2
+                scale=3
             )
         gr.Examples(
             examples=["doc_parse:ask_doc_chain", "genesis.chat_chain:agent_chain"],
             inputs=tb_chain_path,
             examples_per_page=3
         )
+        rd_output_mode = gr.Radio(
+            [LLMOutputMode.DIRECT, LLMOutputMode.STREAM],
+            value=LLMOutputMode.DIRECT,
+            label="Output mode",
+            interactive=True
+        )
 
+    chat_engine = ChatWrapper()
     chatbot = gr.Chatbot()
 
     with gr.Row():
-        message = gr.Textbox(
-            label="What's your question?",
-            placeholder="Ex: Describe the contents",
+        txt_message = gr.Textbox(
+            label="Chat",
+            placeholder="Example: Describe the contents",
             lines=1,
-            scale=19
+            scale=11
         )
         submit = gr.Button(value="Send", variant="secondary", scale=1)
 
     with gr.Row():
-        rd_output_mode = gr.Radio(
-            ["Direct", "Stream"],
-            label="Output mode"
-        )
-
         file_upload_box = gr.File()
 
     gr.Examples(
@@ -115,18 +166,26 @@ with gr.Blocks() as demo:
             "Talk about the documents loaded",
             "List of documents"
         ],
-        inputs=message
+        inputs=txt_message
     )
 
     gr.HTML("Demo application of a Langchain-based PrivateGPT.")
 
-    chat_history = gr.State()
     loaded_chain = gr.State()
+    prepared_message = gr.State('')
 
-    submit.click(chat, inputs=[message, chat_history, loaded_chain, tb_chain_path], outputs=[chatbot, chat_history])
-    message.submit(chat, inputs=[message, chat_history, loaded_chain, tb_chain_path], outputs=[chatbot, chat_history])
-    reload_chain_btn.click(reload_chain, inputs=[tb_chain_path], outputs=[loaded_chain])
-    tb_chain_path.change(load_chain, inputs=[tb_chain_path], outputs=[loaded_chain])
+    clr_msg_box = lambda: ''
+
+    submit.click(chat_engine.prepare, inputs=[txt_message, chatbot, tb_chain_path, loaded_chain], outputs=[chatbot, prepared_message]) \
+        .success(clr_msg_box, outputs=txt_message) \
+        .then(chat_engine.generate, inputs=[prepared_message, chatbot, rd_output_mode, loaded_chain], outputs=chatbot)
+
+    txt_message.submit(chat_engine.prepare, inputs=[txt_message, chatbot, tb_chain_path, loaded_chain], outputs=[chatbot, prepared_message]) \
+        .success(clr_msg_box, outputs=txt_message) \
+        .then(chat_engine.generate, inputs=[prepared_message, chatbot, rd_output_mode, loaded_chain], outputs=chatbot)
+
+    tb_chain_path.change(load_chain, inputs=tb_chain_path, outputs=loaded_chain)
+    reload_chain_btn.click(reload_chain, inputs=tb_chain_path, outputs=loaded_chain)
     file_upload_box.upload(handle_upload, inputs=[file_upload_box])
 
 if __name__ == "__main__":

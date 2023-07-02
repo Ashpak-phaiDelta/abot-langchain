@@ -5,6 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Gradio langchain",
+            "type": "python",
+            "request": "launch",
+            "program": "langchain_gradio.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "Debug Genesis chain",
             "type": "python",
             "request": "launch",

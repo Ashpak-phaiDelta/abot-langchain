@@ -38,3 +38,7 @@ gradio langchain_gradio.py
 ```
 
 3. Open the landing page in browser: [http://localhost:7860/](http://localhost:7860/)
+
+4. Select a chain from the examples listed, or type the path to it (package.module:chain_var format). Begin asking questions.
+
+5. You can upload a file below the chatbot, it will be ingested automatically
