@@ -55,16 +55,16 @@ def dump_documents_to_db(documents: List[Document]):
     )
     texts: List[Document] = text_splitter.split_documents(documents)
 
-    db.add_documents(texts)
     # db.delete_collection()
+    db.add_documents(texts)
+    db.persist()
 
 def upload_file(f: _TemporaryFileWrapper):
     ext = os.path.splitext(f.name)[-1].lower()
 
-    if ext in LOADER_MAPPING:
-        loader_class, loader_args = LOADER_MAPPING[ext]
-        loader = loader_class(f.name, **loader_args)
-        dump_documents_to_db(loader.load())
-        return
+    if ext not in LOADER_MAPPING:
+        raise ValueError(f"Unsupported file extension '{ext}'")
 
-    raise ValueError(f"Unsupported file extension '{ext}'")
+    loader_class, loader_args = LOADER_MAPPING[ext]
+    loader = loader_class(f.name, **loader_args)
+    dump_documents_to_db(loader.load())
