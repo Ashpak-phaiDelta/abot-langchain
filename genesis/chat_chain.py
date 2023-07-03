@@ -1,22 +1,21 @@
 
-from langchain.chat_models import ChatOpenAI
-from langchain.llms import OpenAI
+from langchain.agents import load_tools
 
 from genesis.genesis_agent import get_genesis_api_agent
 
 
-llm = ChatOpenAI(
-    model_name="gpt-3.5-turbo",
-    temperature=0.1,
-    max_tokens=512,
-    # verbose=True
+cli_agent_chain = lambda llm, *additional_tools, input_func=input, llm_for_tool = None, **kwargs: get_genesis_api_agent(
+    llm,
+    *load_tools(
+        [
+            "human" # Human-input
+        ],
+        llm=llm_for_tool or llm,
+        input_func=input_func
+    ),
+    *additional_tools,
+    llm_for_tool=llm_for_tool,
+    **kwargs
 )
 
-llm_tool = OpenAI(
-    temperature=0.1,
-    max_tokens=512,
-    # verbose=True
-)
-
-
-agent_chain = get_genesis_api_agent(llm, llm_for_tool=llm_tool)
+agent_chain = get_genesis_api_agent

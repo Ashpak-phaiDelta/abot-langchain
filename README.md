@@ -39,6 +39,8 @@ gradio langchain_gradio.py
 
 3. Open the landing page in browser: [http://localhost:7860/](http://localhost:7860/)
 
-4. Select a chain from the examples listed, or type the path to it (package.module:chain_var format). Begin asking questions.
+4. Select a chain from the examples listed, or type the path to it (package.module:chain_factory_fn format). Eg: `doc_parse:ask_doc_chain`. The LLM is passed as the keyword argument `llm` to that function.
 
-5. You can upload a file below the chatbot, it will be ingested automatically
+5. Begin asking questions
+
+6. You can upload a file below the chatbot, it will be ingested automatically

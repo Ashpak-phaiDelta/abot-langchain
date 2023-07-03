@@ -15,4 +15,4 @@ def _fixed_derive_fields(language_app):
 setattr(lcorn_api, 'derive_fields', _fixed_derive_fields)
 
 
-app: FastAPI = create_service("genesis.chat_chain:agent_chain")
+app: FastAPI = create_service("genesis.langcorn:chain")

@@ -1,17 +1,15 @@
 
-from langchain.chains import RetrievalQAWithSourcesChain
+from functools import partial
 
-from langchain.llms.openai import OpenAI
+from langchain.chains import RetrievalQAWithSourcesChain
 
 from doc_db import db
 
 
-TARGET_SOURCE_CHUNKS = 8
+TARGET_SOURCE_CHUNKS = 4
 
-llm = OpenAI()
 
-ask_doc_chain = RetrievalQAWithSourcesChain.from_chain_type(
-    llm,
+ask_doc_chain = partial(RetrievalQAWithSourcesChain.from_chain_type,
     chain_type="stuff",
     retriever=db.as_retriever(search_kwargs={"k": TARGET_SOURCE_CHUNKS})
 )

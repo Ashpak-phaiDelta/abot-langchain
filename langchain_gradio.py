@@ -1,13 +1,20 @@
 
-from langchain.chains.base import Chain
-from typing import Optional, Tuple, List
-
-import time
 import enum
-import gradio as gr
+from typing import Optional, List, Tuple, Dict, Any, Union, Callable
+
 import asyncio
-from dotenv import load_dotenv
+import queue
 from concurrent.futures.thread import ThreadPoolExecutor
+
+from langchain.llms.base import BaseLLM
+from langchain.chains.base import Chain
+from langchain.callbacks.base import BaseCallbackHandler
+from langchain.schema import AgentAction, AgentFinish, LLMResult
+
+from langchain.llms.openai import OpenAI
+
+from dotenv import load_dotenv
+import gradio as gr
 
 load_dotenv()
 
@@ -17,41 +24,113 @@ class LLMOutputMode(str, enum.Enum):
     STREAM = "stream"
 
 
-def load_chain_from_module(chain_path: str):
-    from importlib import import_module
+def get_llm() -> BaseLLM:
+    return OpenAI(streaming=True)
+
+
+def load_chain_module_from_path(chain_path: str, perform_reload: bool = False):
+    from importlib import import_module, reload
     module_name, chain_var = chain_path.rsplit(':', 1)
     module = import_module(module_name, '.')
+    if perform_reload:
+        module = reload(module)
     return module, chain_var
 
 
-def load_chain(chain_path: str):
+def load_chain(chain_path: str, llm: BaseLLM, perform_reload: bool = False):
     if chain_path:
-        chain_module, chain_var = load_chain_from_module(chain_path)
-        chain = getattr(chain_module, chain_var)
-        return chain
+        chain_module, chain_var = load_chain_module_from_path(chain_path, perform_reload)
+        chain_factory: Callable[[BaseLLM], Chain] = getattr(chain_module, chain_var)
+        return chain_factory(llm=llm)
 
-def reload_chain(chain_path: str):
-    if chain_path:
-        from importlib import reload
-        chain_module, chain_var = load_chain_from_module(chain_path)
-        chain_module = reload(chain_module)
-        chain = getattr(chain_module, chain_var)
-        return chain
+
+def reload_chain(chain_path: str, llm: BaseLLM):
+    return load_chain(chain_path, llm, perform_reload=True)
+
 
 def handle_upload(file):
-    from importlib import import_module, reload
-    ingest = import_module("doc_ingest", '.')
-    ingest = reload(ingest)
-    ingest.upload_file(file)
+    from doc_ingest import upload_file
+    upload_file(file)
 
 
-def run_chain_sync(q: asyncio.Queue, chain: Chain, input: str):
-    # TODO: Custom callback class to append to queue
-    result = chain(input, callbacks=[])
-    # for s in msg:
-    #     time.sleep(1)
-    #     q.put_nowait(s)
-    return result[chain.output_keys[0]]
+class QueueCallbackHandler(BaseCallbackHandler):
+    _queue: Union[queue.Queue, asyncio.Queue]
+
+    def __init__(self, queue: Union[queue.Queue, asyncio.Queue]):
+        self._queue = queue
+
+    def on_llm_start(
+        self,
+        serialized: Dict[str, Any],
+        prompts: List[str],
+        **kwargs: Any
+    ) -> None:
+        """Run when LLM starts running."""
+        pass
+
+    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        """Run on new LLM token. Only available when streaming is enabled."""
+        self._queue.put_nowait(token)
+
+    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+        """Run when LLM ends running."""
+        pass
+
+    def on_llm_error(
+        self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any
+    ) -> None:
+        """Run when LLM errors."""
+        pass
+
+    def on_chain_start(
+        self, serialized: Dict[str, Any], inputs: Dict[str, Any], **kwargs: Any
+    ) -> None:
+        """Run when chain starts running."""
+        pass
+
+    def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> None:
+        """Run when chain ends running."""
+        pass
+
+    def on_chain_error(
+        self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any
+    ) -> None:
+        """Run when chain errors."""
+        pass
+
+    def on_tool_start(
+        self, serialized: Dict[str, Any], input_str: str, **kwargs: Any
+    ) -> None:
+        """Run when tool starts running."""
+        pass
+
+    def on_agent_action(self, action: AgentAction, **kwargs: Any) -> Any:
+        """Run on agent action."""
+        pass
+
+    def on_tool_end(self, output: str, **kwargs: Any) -> None:
+        """Run when tool ends running."""
+        pass
+
+    def on_tool_error(
+        self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any
+    ) -> None:
+        """Run when tool errors."""
+        pass
+
+    def on_text(self, text: str, **kwargs: Any) -> None:
+        """Run on arbitrary text."""
+        pass
+
+    def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> None:
+        """Run on agent end."""
+        pass
+
+
+def run_chain_sync(q: asyncio.Queue, chain: Chain, inputs: Union[str, Dict[str, str]]):
+    stream_callback = QueueCallbackHandler(queue=q)
+    result = chain(inputs, callbacks=[stream_callback])
+    return '\n\n'.join(('%s:\n' % key.upper() if i > 0 else '') + result[key] for i, key in enumerate(chain.output_keys))
 
 class ChatWrapper:
     def __init__(self):
@@ -80,9 +159,9 @@ class ChatWrapper:
         history,
         mode: LLMOutputMode,
         chain: Chain
-        ):
-        chat_idx = -1
-        chat_output = history[chat_idx]
+    ):
+        chat_idx = -1 # The latest chat message. We will be writing output to this one
+        chat_output: Tuple[str, str] = history[chat_idx]
 
         if len(user_message) == 0:
             yield history
@@ -96,9 +175,10 @@ class ChatWrapper:
             output_task = asyncio.get_running_loop().run_in_executor(
                 self._exec, run_chain_sync, output_queue, *llm_args)
 
+            chat_output[1] = "Generating..."
+            yield history
+
             if mode == LLMOutputMode.DIRECT:
-                chat_output[1] = "Generating..."
-                yield history
                 chat_output[1] = await output_task
                 yield history
             elif mode == LLMOutputMode.STREAM:
@@ -106,32 +186,39 @@ class ChatWrapper:
                 chat_output[1] = ""
                 while (not output_task.done()) and fail_count < 3:
                     try:
-                        tok = await asyncio.wait_for(output_queue.get(), timeout=30)
-                        chat_output[1] += tok
-                        yield history
-                    except asyncio.CancelledError:
+                        token_task = asyncio.ensure_future(asyncio.wait_for(output_queue.get(), timeout=30))
+
+                        await asyncio.wait([token_task, output_task], return_when=asyncio.FIRST_COMPLETED)
+
+                        if token_task.done():
+                            chat_output[1] += token_task.result()
+                            output_queue.task_done()
+                            yield history
+                    except (asyncio.CancelledError, asyncio.TimeoutError) as e:
+                        print("Exception -", type(e), 'is', e)
                         fail_count += 1
                     else:
                         fail_count = 0
-                chat_output[1] = await output_task
+                # chat_output[1] = await output_task
+                await output_task
                 yield history
             else:
                 yield history
                 return
 
-with gr.Blocks().queue(20) as demo:
+with gr.Blocks() as demo:
     with gr.Row(equal_height=False):
         gr.Markdown("# PrivateGPT Demo")
 
         with gr.Row():
-            reload_chain_btn = gr.Button("Reload chain", size='sm')
             tb_chain_path = gr.Textbox(
                 placeholder="Path to the chain module",
-                show_label=False,
+                show_label=True,
                 lines=1,
                 type="text",
                 scale=3
             )
+            reload_chain_btn = gr.Button("Reload chain", size='sm')
         gr.Examples(
             examples=["doc_parse:ask_doc_chain", "genesis.chat_chain:agent_chain"],
             inputs=tb_chain_path,
@@ -171,6 +258,7 @@ with gr.Blocks().queue(20) as demo:
 
     gr.HTML("Demo application of a Langchain-based PrivateGPT.")
 
+    loaded_llm = gr.State(get_llm)
     loaded_chain = gr.State()
     prepared_message = gr.State('')
 
@@ -178,15 +266,17 @@ with gr.Blocks().queue(20) as demo:
 
     submit.click(chat_engine.prepare, inputs=[txt_message, chatbot, tb_chain_path, loaded_chain], outputs=[chatbot, prepared_message]) \
         .success(clr_msg_box, outputs=txt_message) \
-        .then(chat_engine.generate, inputs=[prepared_message, chatbot, rd_output_mode, loaded_chain], outputs=chatbot)
+        .success(chat_engine.generate, inputs=[prepared_message, chatbot, rd_output_mode, loaded_chain], outputs=chatbot)
 
     txt_message.submit(chat_engine.prepare, inputs=[txt_message, chatbot, tb_chain_path, loaded_chain], outputs=[chatbot, prepared_message]) \
         .success(clr_msg_box, outputs=txt_message) \
-        .then(chat_engine.generate, inputs=[prepared_message, chatbot, rd_output_mode, loaded_chain], outputs=chatbot)
+        .success(chat_engine.generate, inputs=[prepared_message, chatbot, rd_output_mode, loaded_chain], outputs=chatbot)
 
-    tb_chain_path.change(load_chain, inputs=tb_chain_path, outputs=loaded_chain)
-    reload_chain_btn.click(reload_chain, inputs=tb_chain_path, outputs=loaded_chain)
+    tb_chain_path.change(load_chain, inputs=[tb_chain_path, loaded_llm], outputs=loaded_chain)
+    reload_chain_btn.click(reload_chain, inputs=[tb_chain_path, loaded_llm], outputs=loaded_chain)
     file_upload_box.upload(handle_upload, inputs=[file_upload_box])
+
+demo.queue(20)
 
 if __name__ == "__main__":
     demo.launch(debug=True)

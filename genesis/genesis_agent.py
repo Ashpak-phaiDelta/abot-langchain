@@ -3,9 +3,12 @@ from pathlib import Path
 
 from langchain.llms.base import BaseLLM
 from langchain.agents.agent_types import AgentType
-from langchain.agents.tools import Tool, BaseTool
-from langchain.requests import Requests
+from langchain.agents.tools import BaseTool
+from langchain.agents import AgentExecutor, initialize_agent
 
+from langchain.memory import ConversationBufferWindowMemory, ConversationSummaryBufferMemory
+
+from langchain.requests import Requests
 from langchain.tools.openapi.utils.openapi_utils import OpenAPISpec
 
 
@@ -16,14 +19,12 @@ from langchain.tools.openapi.utils.openapi_utils import OpenAPISpec
 # from langchain.agents.agent_toolkits.openapi.spec import reduce_openapi_spec
 # from langchain.agents.agent_toolkits import NLAToolkit
 
-# Just a wrapper I made to ease in creating an Agent with memory
-from .agent import make_agent
 
 # All tools
 from .genesis_api import *
 
 from pydantic import BaseSettings, AnyUrl, FilePath
-from typing import Union
+from typing import Union, List
 from functools import lru_cache
 
 
@@ -67,9 +68,6 @@ TOOLS:
 Assistant has access to the following tools: """
 
 
-GENESIS_TOOL_DESCRIPTION = "An IoT platform, Genesis is the product that can help users gather information about Sensors, locations such as warehouses and buildings, analytics, and status of the Sensors and locations themselves. Use this tool when any request to sensors, units/locations or warehouses is asked. Also used when followup questions or actions are asked. If an error occurs or sensor is not found, inform user about the error. Users are not aware of sensor IDs and mostly use names/aliases"
-
-
 # Settings fetchers
 
 @lru_cache()
@@ -100,7 +98,8 @@ def fetch_genesis_spec() -> OpenAPISpec:
     raise ValueError("You must set the setting `openapi_file` or `GENESIS_OPENAPI_FILE` environment to a path that exists.\nIt was set to '%s'" % str(spec_file))
 
 
-def get_genesis_api_agent(llm, *additional_tools, llm_for_tool = None):
+def get_genesis_api_agent(llm: BaseLLM, *additional_tools: BaseTool, llm_for_tool: BaseLLM = None) -> AgentExecutor:
+    """Create an Agent that executes queries for Genesis server"""
     # Requests with auth token
     requests = Requests(headers={"Authorization": "Bearer %s" % get_auth_token()})
 
@@ -110,8 +109,11 @@ def get_genesis_api_agent(llm, *additional_tools, llm_for_tool = None):
     agent_verbose = get_agent_is_verbose()
     tool_verbose = get_tool_is_verbose()
 
+    if llm_for_tool is None:
+        llm_for_tool = llm
+
     # List of tools available to the agent
-    genesis_tools = [
+    genesis_tools: List[BaseTool] = [
         # _get_tool_genesis_sensor_status(llm, spec, requests),
         # get_tool_genesis_sensor_list(llm, spec, requests, verbose=tool_verbose),
         # get_tool_genesis_location_list(llm_for_tool, spec, requests, verbose=tool_verbose),
@@ -125,26 +127,24 @@ def get_genesis_api_agent(llm, *additional_tools, llm_for_tool = None):
         *additional_tools
     ]
 
-    # Create agent for "chat" model
-
-    return make_agent(
-        llm,
-        genesis_tools,
-        # agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
-        agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
-        verbose=agent_verbose,
-        agent_kwargs=dict(
-            # prefix=GENESIS_AGENT_PROMPT_PREFIX,
-            system_message=GENESIS_AGENT_PROMPT_PREFIX,
-            # format_instructions=GENESIS_AGENT_PROMPT_FORMAT_INSTRUCTIONS
-        )
+    # Agent's memory
+    memory = ConversationSummaryBufferMemory(
+        llm=llm,
+        memory_key="chat_history",
+        return_messages=True
     )
 
+    # Create agent for "chat" model
 
-def make_genesis_tool(llm) -> BaseTool:
-    genesis_agent = get_genesis_api_agent(llm)
-    return Tool(
-        name="Genesis",
-        description=GENESIS_TOOL_DESCRIPTION,
-        func=genesis_agent.run
+    return initialize_agent(
+        genesis_tools,
+        llm,
+        # agent=AgentType.CONVERSATIONAL_REACT_DESCRIPTION, # For Completion-type LLM
+        agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION, # For Chat-type LLM
+        verbose=agent_verbose,
+        memory=memory,
+        agent_kwargs=dict(
+            # prefix=GENESIS_AGENT_PROMPT_PREFIX, # For Completion-type LLM
+            system_message=GENESIS_AGENT_PROMPT_PREFIX, # For Chat-type LLM
+        )
     )

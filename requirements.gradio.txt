@@ -1,0 +1,3 @@
+gradio
+unstructured[local-inference]
+layoutparser[layoutmodels,tesseract]
