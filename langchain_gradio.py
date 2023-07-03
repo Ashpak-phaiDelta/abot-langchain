@@ -62,7 +62,7 @@ class ChatWrapper:
         if loaded_chain is None:
             if not chain_path:
                 raise ValueError("Provide path to the chain object")
-            raise TimeoutError("Chain is still loading. Please try again in a bit.")
+            raise RuntimeError("Chain is still loading. Please try again in a bit.")
 
         if self._lock.locked():
             raise RuntimeError("A chat operation is still in progress. Please wait till it finishes.")
