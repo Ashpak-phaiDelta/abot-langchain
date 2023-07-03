@@ -106,10 +106,10 @@ class ChatWrapper:
                 chat_output[1] = ""
                 while (not output_task.done()) and fail_count < 3:
                     try:
-                        tok = await asyncio.wait_for(output_queue.get(), timeout=2)
+                        tok = await asyncio.wait_for(output_queue.get(), timeout=30)
                         chat_output[1] += tok
                         yield history
-                    except (asyncio.CancelledError, asyncio.QueueEmpty):
+                    except asyncio.CancelledError:
                         fail_count += 1
                     else:
                         fail_count = 0
