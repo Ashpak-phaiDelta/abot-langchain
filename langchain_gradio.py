@@ -12,6 +12,7 @@ from langchain.callbacks.base import BaseCallbackHandler
 from langchain.schema import AgentAction, AgentFinish, LLMResult
 
 from langchain.llms.openai import OpenAI
+from langchain.chat_models.openai import ChatOpenAI
 
 from dotenv import load_dotenv
 import gradio as gr
@@ -25,7 +26,7 @@ class LLMOutputMode(str, enum.Enum):
 
 
 def get_llm() -> BaseLLM:
-    return OpenAI(streaming=True)
+    return ChatOpenAI(streaming=True)
 
 
 def load_chain_module_from_path(chain_path: str, perform_reload: bool = False):
@@ -48,9 +49,9 @@ def reload_chain(chain_path: str, llm: BaseLLM):
     return load_chain(chain_path, llm, perform_reload=True)
 
 
-def handle_upload(file):
+async def handle_upload(file):
     from doc_ingest import upload_file
-    upload_file(file)
+    return await asyncio.get_event_loop().run_in_executor(None, upload_file, file)
 
 
 class QueueCallbackHandler(BaseCallbackHandler):
@@ -184,18 +185,19 @@ class ChatWrapper:
             elif mode == LLMOutputMode.STREAM:
                 fail_count = 0
                 chat_output[1] = ""
-                while (not output_task.done()) and fail_count < 3:
+                while not output_task.done() and fail_count < 3:
                     try:
-                        token_task = asyncio.ensure_future(asyncio.wait_for(output_queue.get(), timeout=30))
+                        token_task = asyncio.ensure_future(output_queue.get())
 
-                        await asyncio.wait([token_task, output_task], return_when=asyncio.FIRST_COMPLETED)
+                        done, pending = await asyncio.wait([token_task, output_task], return_when=asyncio.FIRST_COMPLETED, timeout=10)
 
                         if token_task.done():
-                            chat_output[1] += token_task.result()
+                            chat_output[1] += await token_task
                             output_queue.task_done()
                             yield history
-                    except (asyncio.CancelledError, asyncio.TimeoutError) as e:
-                        print("Exception -", type(e), 'is', e)
+                        elif token_task in pending:
+                            token_task.cancel()
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
                         fail_count += 1
                     else:
                         fail_count = 0
@@ -206,7 +208,7 @@ class ChatWrapper:
                 yield history
                 return
 
-with gr.Blocks() as demo:
+with gr.Blocks().queue(20) as demo:
     with gr.Row(equal_height=False):
         gr.Markdown("# PrivateGPT Demo")
 
@@ -275,8 +277,6 @@ with gr.Blocks() as demo:
     tb_chain_path.change(load_chain, inputs=[tb_chain_path, loaded_llm], outputs=loaded_chain)
     reload_chain_btn.click(reload_chain, inputs=[tb_chain_path, loaded_llm], outputs=loaded_chain)
     file_upload_box.upload(handle_upload, inputs=[file_upload_box])
-
-demo.queue(20)
 
 if __name__ == "__main__":
     demo.launch(debug=True)
