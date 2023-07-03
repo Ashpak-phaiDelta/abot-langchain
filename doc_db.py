@@ -18,5 +18,6 @@ embeddings = HuggingFaceEmbeddings(model_name=EMBEDDINGS_MODEL_NAME)
 
 db = Chroma(
     embedding_function=embeddings,
-    client_settings=CHROMA_SETTINGS
+    client_settings=CHROMA_SETTINGS,
+    persist_directory=PERSIST_DIRECTORY
 )
