@@ -1,6 +1,7 @@
 
 from pathlib import Path
 
+from langchain.llms.base import BaseLLM
 from langchain.agents.agent_types import AgentType
 from langchain.agents.tools import Tool, BaseTool
 from langchain.requests import Requests
@@ -113,14 +114,18 @@ def get_genesis_api_agent(llm, *additional_tools, llm_for_tool = None):
     genesis_tools = [
         # _get_tool_genesis_sensor_status(llm, spec, requests),
         # get_tool_genesis_sensor_list(llm, spec, requests, verbose=tool_verbose),
-        get_tool_genesis_location_list(llm_for_tool, spec, requests, verbose=tool_verbose),
-        get_tool_genesis_location_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
-        get_tool_genesis_warehouse_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
-        get_tool_genesis_warehouse_unit_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
+        # get_tool_genesis_location_list(llm_for_tool, spec, requests, verbose=tool_verbose),
+        # get_tool_genesis_location_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
+        # get_tool_genesis_warehouse_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
+        # get_tool_genesis_warehouse_unit_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
         get_tool_genesis_unit_sensor_list(llm_for_tool, spec, requests, verbose=tool_verbose),
+
+        # TODO @Ashpak add sensor level tool here
+
         *additional_tools
     ]
-    
+
+    # Create agent for "chat" model
 
     return make_agent(
         llm,
