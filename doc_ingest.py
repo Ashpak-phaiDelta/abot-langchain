@@ -1,6 +1,8 @@
 
 import os
+from typing import IO
 from tempfile import _TemporaryFileWrapper
+from io import BufferedRandom
 
 from doc_db import db
 
@@ -15,7 +17,8 @@ from langchain.document_loaders import (
     UnstructuredMarkdownLoader,
     UnstructuredPowerPointLoader,
     UnstructuredWordDocumentLoader,
-    UnstructuredExcelLoader
+    UnstructuredExcelLoader,
+    UnstructuredFileIOLoader
 )
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -47,7 +50,7 @@ SPLIT_CHUNK_OVERLAP = 50
 """How many characters between two chunks are same"""
 
 
-def dump_documents_to_db(documents: List[Document]):
+def dump_documents_to_db(documents: List[Document]) -> int:
     # Split document into chunks (with some overlapping content)
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=SPLIT_CHUNK_SIZE,
@@ -58,13 +61,20 @@ def dump_documents_to_db(documents: List[Document]):
     # db.delete_collection()
     db.add_documents(texts)
     db.persist()
+    return len(texts)
 
-def upload_file(f: _TemporaryFileWrapper):
-    ext = os.path.splitext(f.name)[-1].lower()
+def handle_document(file: IO) -> int:
+    try:
+        metadata_name = os.path.basename(file.name)
+        loader = UnstructuredFileIOLoader(file, metadata_filename=metadata_name)
+        return dump_documents_to_db(loader.load())
+    finally:
+        pass
 
-    if ext not in LOADER_MAPPING:
-        raise ValueError(f"Unsupported file extension '{ext}'")
 
-    loader_class, loader_args = LOADER_MAPPING[ext]
-    loader = loader_class(f.name, **loader_args)
-    dump_documents_to_db(loader.load())
+def upload_files(*files: _TemporaryFileWrapper):
+    for file in files:
+        with open(file.name, 'rb') as f:
+            print("Uploading file %s..." % file.name)
+            num_document_chunks = handle_document(f)
+            print("%s uploaded, %d chunks" % (file.name, num_document_chunks))

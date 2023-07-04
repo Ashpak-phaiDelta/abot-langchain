@@ -5,6 +5,7 @@ from typing import Optional, List, Tuple, Dict, Any, Union, Callable
 import asyncio
 import queue
 from concurrent.futures.thread import ThreadPoolExecutor
+from tempfile import _TemporaryFileWrapper
 
 from langchain.llms.base import BaseLLM
 from langchain.chains.base import Chain
@@ -49,9 +50,11 @@ def reload_chain(chain_path: str, llm: BaseLLM):
     return load_chain(chain_path, llm, perform_reload=True)
 
 
-async def handle_upload(file):
-    from doc_ingest import upload_file
-    return await asyncio.get_event_loop().run_in_executor(None, upload_file, file)
+async def handle_upload(files: List[_TemporaryFileWrapper]):
+    # Note: The _TemporaryFileWrapper is only useful for getting the filename as it has no access to its content
+    from doc_ingest import upload_files
+    upload_task = asyncio.get_event_loop().run_in_executor(None, upload_files, *files)
+    return await upload_task
 
 
 class QueueCallbackHandler(BaseCallbackHandler):
@@ -246,7 +249,7 @@ with gr.Blocks().queue(20) as demo:
         submit = gr.Button(value="Send", variant="secondary", scale=1)
 
     with gr.Row():
-        file_upload_box = gr.File()
+        file_upload_box = gr.File(file_count="multiple")
 
     gr.Examples(
         examples=[
