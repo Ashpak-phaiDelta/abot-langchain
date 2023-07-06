@@ -1,15 +1,23 @@
 
-from pathlib import Path
 
 from langchain.llms.base import BaseLLM
 from langchain.agents.agent_types import AgentType
-from langchain.agents.tools import BaseTool
+from langchain.agents.tools import BaseTool, Tool
 from langchain.agents import AgentExecutor, initialize_agent
 
 from langchain.memory import ConversationBufferWindowMemory, ConversationSummaryBufferMemory
 
 from langchain.requests import Requests
-from langchain.tools.openapi.utils.openapi_utils import OpenAPISpec
+
+# All tools
+from .genesis_api import *
+
+from typing import List
+
+from .config import fetch_genesis_spec, get_agent_is_verbose, get_tool_is_verbose, get_auth_token
+
+# Prompts
+from .prompts import is_chat_model, get_agent_prompt, GENESIS_AGENT_PROMPT_PREFIX
 
 
 # Trying out the ready-made way. It isn't as powerful, prompt is fixed
@@ -18,84 +26,6 @@ from langchain.tools.openapi.utils.openapi_utils import OpenAPISpec
 # from langchain.agents.agent_toolkits.openapi.planner import create_openapi_agent
 # from langchain.agents.agent_toolkits.openapi.spec import reduce_openapi_spec
 # from langchain.agents.agent_toolkits import NLAToolkit
-
-
-# All tools
-from .genesis_api import *
-
-from pydantic import BaseSettings, AnyUrl, FilePath
-from typing import Union, List
-from functools import lru_cache
-
-
-class GenesisSettings(BaseSettings):
-    auth_token: str
-    agent_is_verbose: bool = False
-    tool_is_verbose: bool = False
-    openapi_file: Union[AnyUrl, FilePath, str] = 'genesis_openapi.yaml'
-
-    class Config:
-        env_file = '.env'
-        env_prefix = 'genesis_'
-
-# Prompts
-
-# Genesis is an IoT platform with various levels of information. First level is Location level where warehouses are located across the globe. For example, VER_W1 is one such warehouse. Next level is Warehouse level which consists of Units (basically buildings) which may also contain sensors. A level inside it is the Unit level which have the sensors (temperature, energy, smoke(VESDA), etc.). Each level can have a summary. Every level (warehouse, unit, sensor) has an ID (number).
-# The assistant is designed to be able to assist with a wide range of analytical and sensor-based tasks, from answering simple questions of getting values to providing a summary on a wide range of sensor data. As a language model, Assistant is able to generate human-like text based on the input it receives, allowing it to engage in natural-sounding conversations and provide responses that are coherent and relevant to the topic at hand. Assistant aims to be accurate and provide responses only from the data available.
-
-
-GENESIS_AGENT_PROMPT_PREFIX = """You are a very powerful IoT and Analytics Assistant for an application called Genesis made by the company phAIdelta. You are able to make use of various tools available as a means of answering questions.
-Genesis is an IoT platform with various levels of information. First level is Location level where warehouses are located across the globe. For example, VER_W1 is one such warehouse. Next level is Warehouse level which consists of Units (basically buildings) which may also contain sensors. A level inside it is the Unit level which have the sensors (temperature, energy, smoke(VESDA), etc.). Each level can have a summary. Every level (warehouse, unit, sensor) has an ID (number).
-You are also able to use tools in sequence to answer the question and to get context. Eg: asking summary of location VER_W1, you need to fetch the integer warehouse_id of VER_W1 first, then get the summary.
-The ID (integer) must be given to whichever tool that requires it. For example, warehouse summary needs warehouse_id (number), but user may say "VER_W1" which is the name. The "1" in VER_W1 is not the ID, but just the name. You must fetch the ID first using another tool, then pass the ID to the appropriate tool. DO NOT pass name like VER_W1 to a tool that requires an integer ID.
-Do NOT make up the ID of warehouse_id, unit_id or sensor_id, but use tool designed to fetch relevant IDs first. Eg. Use list of locations to get warehouse_id, and list of units to get unit_id. Do NOT assume the ID, always use tool to get this. You can run a sequence of tools to get to the final answer.
-Make sure to display the information in the Final Answer when information is requested, after that give the answer. eg. List of sensors are also to be shown one per line as list items along with the text you will say.
-
-Example:
-Human: How many sensors are there in unit XYZ at VER_W1?
-AI: use tool to find warehouse_id of VER_W1, then use tool to find unit_id of XYZ inside VER_W1, finally use tool to list and count sensors in the unit_id.
-Human: inside warehouse level VER_W1, how many fire sensors are triggered? which ones?
-AI: use tool to find warehouse_id of VER_W1, then use tool to list and count fire sensors in the warehouse.
-
-
-Make sure to strictly follow "RESPONSE FORMAT INSTRUCTIONS" to produce all output.
-
-Overall, Assistant is a powerful tool that can help with a wide range of tasks and provide valuable insights and information on a wide range of topics. Whether you need help with a specific question or just want to have a conversation about a particular topic, Assistant is here to assist. If you are unable to answer a question, ask user to provide the needed information or say `I don't know`
-
-TOOLS:
-------
-
-Assistant has access to the following tools: """
-
-
-# Settings fetchers
-
-@lru_cache()
-def get_auth_token():
-    return GenesisSettings().auth_token
-
-@lru_cache()
-def get_agent_is_verbose():
-    return GenesisSettings().agent_is_verbose
-
-@lru_cache()
-def get_tool_is_verbose():
-    return GenesisSettings().tool_is_verbose
-
-@lru_cache()
-def get_openapi_file():
-    return GenesisSettings().openapi_file
-
-
-def fetch_genesis_spec() -> OpenAPISpec:
-    spec_file = get_openapi_file()
-
-    if isinstance(spec_file, AnyUrl):
-        return OpenAPISpec.from_url(spec_file)
-    elif Path(spec_file).exists():
-        return OpenAPISpec.from_file(spec_file)
-
-    raise ValueError("You must set the setting `openapi_file` or `GENESIS_OPENAPI_FILE` environment to a path that exists.\nIt was set to '%s'" % str(spec_file))
 
 
 def get_genesis_api_agent(llm: BaseLLM, *additional_tools: BaseTool, llm_for_tool: BaseLLM = None) -> AgentExecutor:
@@ -112,21 +42,6 @@ def get_genesis_api_agent(llm: BaseLLM, *additional_tools: BaseTool, llm_for_too
     if llm_for_tool is None:
         llm_for_tool = llm
 
-    # List of tools available to the agent
-    genesis_tools: List[BaseTool] = [
-        # _get_tool_genesis_sensor_status(llm, spec, requests),
-        # get_tool_genesis_sensor_list(llm, spec, requests, verbose=tool_verbose),
-        # get_tool_genesis_location_list(llm_for_tool, spec, requests, verbose=tool_verbose),
-        # get_tool_genesis_location_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
-        # get_tool_genesis_warehouse_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
-        # get_tool_genesis_warehouse_unit_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
-        get_tool_genesis_unit_sensor_list(llm_for_tool, spec, requests, verbose=tool_verbose),
-
-        # TODO @Ashpak add sensor level tool here
-
-        *additional_tools
-    ]
-
     # Agent's memory
     memory = ConversationSummaryBufferMemory(
         llm=llm,
@@ -134,17 +49,37 @@ def get_genesis_api_agent(llm: BaseLLM, *additional_tools: BaseTool, llm_for_too
         return_messages=True
     )
 
-    # Create agent for "chat" model
+    # Create Agents for various levels
+    unit_level_agent = get_unit_level_query_agent(llm, llm_for_tool=llm_for_tool, spec=spec, requests=requests, memory=memory, verbose=tool_verbose)
+
+    # List of tools available to the agent
+    genesis_tools: List[BaseTool] = [
+        get_tool_genesis_location_list(llm_for_tool, spec, requests, verbose=tool_verbose),
+        get_tool_genesis_location_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
+        # get_tool_genesis_warehouse_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
+        # get_tool_genesis_warehouse_unit_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
+        ## get_tool_genesis_unit_sensor_list(llm_for_tool, spec, requests, verbose=tool_verbose),
+        # get_tool_genesis_sensor_list(llm, spec, requests, verbose=tool_verbose),
+
+        # Unit-level query agent
+        Tool.from_function(
+            func=unit_level_agent.run,
+            name='agent_genesis_unit_level_query',
+            description="Use for querying unit information or unit-level sensors of a specific unit, or to find unit id given the name"
+        ),
+
+        # TODO @Ashpak add sensor level agent tool here
+
+        *additional_tools
+    ]
 
     return initialize_agent(
         genesis_tools,
         llm,
-        # agent=AgentType.CONVERSATIONAL_REACT_DESCRIPTION, # For Completion-type LLM
-        agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION, # For Chat-type LLM
+        agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION if is_chat_model(llm) else AgentType.CONVERSATIONAL_REACT_DESCRIPTION,
         verbose=agent_verbose,
         memory=memory,
-        agent_kwargs=dict(
-            # prefix=GENESIS_AGENT_PROMPT_PREFIX, # For Completion-type LLM
-            system_message=GENESIS_AGENT_PROMPT_PREFIX, # For Chat-type LLM
+        agent_kwargs=get_agent_prompt(llm,
+            prefix_prompt=GENESIS_AGENT_PROMPT_PREFIX
         )
     )

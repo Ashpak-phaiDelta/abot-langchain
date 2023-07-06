@@ -4,23 +4,16 @@ import pandas as pd
 
 from .base import create_api_tool
 
+from langchain.tools.base import Tool
 from langchain.chains import OpenAPIEndpointChain
 from langchain.chains.api.openapi.chain import OpenAPIEndpointChain
 
-from pydantic import BaseModel
 from typing import Callable
 
 
 def get_tool_genesis_warehouse_summary(llm, spec, requests, verbose: bool = False):
     def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
-        class ParamModel(BaseModel):
-            original_query: str
-            location_id: int
         def warehouse_sensor_summary(query: str) -> str:
-            # schema = ParamModel.parse_obj(json.loads(query))
-            # params_jsonified = json.dumps({
-            #     "warehouse_id": schema.location_id
-            # })
             try:
                 response_data = chain.run(query)
                 resp_json = json.loads(response_data)
@@ -73,14 +66,7 @@ The text between $text$ are instructions for you''',
 
 def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool = False):
     def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
-        class ParamModel(BaseModel):
-            original_query: str
-            location_id: int
         def warehouse_unit_list_summary(query: str) -> str:
-            # schema = ParamModel.parse_obj(json.loads(query))
-            # params_jsonified = json.dumps({
-            #     "warehouse_id": schema.location_id
-            # })
             try:
                 response_data = chain.run(query)
                 resp_json = json.loads(response_data)
@@ -124,7 +110,21 @@ The text between $text$ are instructions for you''',
     )
 
 
+def get_tool_genesis_unit_search(llm, spec, requests, verbose: bool = False):
+    def unit_search(query: str) -> str:
+        print("Query:", query)
+        return 'Not found'
+    return Tool.from_function(
+        func=unit_search,
+        name='unit_search',
+        description='''Use to find the id of a unit from the unit's name. For example, unit named "Cipla" can return id 1000, "B2 Basement" can be 1001, etc. This ID is used for other tools. Provide input only of the Unit name to search for, for example, "Cipla", "B2 Basement", and will return the id of the unit, else "Not found".''',
+        verbose=verbose
+    )
+
+
+
 __all__ = [
     'get_tool_genesis_warehouse_summary',
-    'get_tool_genesis_warehouse_unit_summary'
+    'get_tool_genesis_warehouse_unit_summary',
+    'get_tool_genesis_unit_search'
 ]

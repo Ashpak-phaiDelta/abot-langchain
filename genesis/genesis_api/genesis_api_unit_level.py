@@ -10,7 +10,8 @@ from langchain.agents.agent_types import AgentType
 from langchain.chains import OpenAPIEndpointChain
 from langchain.chains.api.openapi.chain import OpenAPIEndpointChain
 
-from pydantic import BaseModel
+from ..prompts import is_chat_model, get_agent_prompt, GENESIS_UNIT_LEVEL_AGENT_PROMPT_PREFIX
+
 from typing import Callable
 
 
@@ -65,69 +66,27 @@ def get_tool_genesis_unit_sensor_list(llm, spec, requests, verbose: bool = False
     )
 
 
-
-def get_tool_genesis_unit_search(llm, spec, requests, verbose: bool = False):
-    def unit_search(query: str) -> str:
-        print("Query:", query)
-        return 'Not found'
-    return Tool.from_function(
-        func=unit_search,
-        name='unit_search',
-        description='''Use to find the id of a unit from the unit's name. For example, unit named "Cipla" can return id 1000, "B2 Basement" can be 1001, etc. This ID is used for other tools. Provide input only as valid stringified json string. Eg: "{{\\"unit_name_query\\": "$name of the unit that user requested$", \\"warehouse\\": $Warehouse name if provided (optional). Omit field if not.$}}". The parts between $ are instructions for you.''',
-        verbose=verbose
-    )
-
-
-
-def get_unit_level_query_agent(llm, llm_for_tool, spec, requests, verbose: bool = False) -> AgentExecutor:
+def get_unit_level_query_agent(llm, llm_for_tool, spec, requests, memory, verbose: bool = False) -> AgentExecutor:
     return initialize_agent(
         [
             get_tool_genesis_unit_sensor_list(llm_for_tool, spec, requests, verbose),
-            get_tool_genesis_unit_search(llm_for_tool, spec, requests, verbose)
+            Tool(
+                func=lambda q: "Error: Need to know warehouse name",
+                name="get_unit_status",
+                description="Use when status of a unit within a warehouse is needed, such as \"B2 Basement status\", \"Cipla unit information\", etc. It gives status such as how many sensors are normal/inactive/out, unit state."
+            )
         ],
         llm,
-        agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION,
-        agent_kwargs=dict(
-            system_message="""You are a powerful API client Assistant that executes the correct APIs from schemas of their parameters from the given query. You are going to be asked about unit-level details or unit-level sensors in an IoT application, which contains warehouses, and units (rooms) are within warehouses. You can access tools that perform the API request and return observation.
-For example: `how many units are there?`, `In Cipla unit, which sensors are out?`, `B2 basement status`
-Do not make up an answer, if you can't produce the final answer due to no tools satisfying, say "I don't know" and elaborate on what the user could do to improve query.
-
-Make sure to strictly follow "RESPONSE FORMAT INSTRUCTIONS" to produce all output.
-
-Overall, Assistant is a powerful tool that can help with a wide range of tasks and provide valuable insights and information on a wide range of topics. Whether you need help with a specific question or just want to have a conversation about a particular topic, Assistant is here to assist. If you are unable to answer a question, ask user to provide the needed information or say `I don't know`
-
-TOOLS:
-------
-
-You have access to the following tools: """, # For Chat-type LLM
+        agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION if is_chat_model(llm) else AgentType.CONVERSATIONAL_REACT_DESCRIPTION,
+        verbose=verbose,
+        memory=memory,
+        agent_kwargs=get_agent_prompt(llm,
+            prefix_prompt=GENESIS_UNIT_LEVEL_AGENT_PROMPT_PREFIX
         )
     )
 
 
 __all__ = [
-    'get_tool_genesis_unit_sensor_list'
+    'get_tool_genesis_unit_sensor_list',
+    'get_unit_level_query_agent'
 ]
-
-if __name__ == '__main__':
-    from dotenv import load_dotenv
-
-    load_dotenv()
-
-    from langchain.requests import Requests
-    from ..basic_llms import llm, llm_tool
-    from ..genesis_agent import fetch_genesis_spec, get_auth_token
-    from ..utils import read_input
-
-    # Requests with auth token
-    requests = Requests(headers={"Authorization": "Bearer %s" % get_auth_token()})
-
-    # Genesis API specifications (OpenAPI)
-    spec = fetch_genesis_spec()
-
-    agent = get_unit_level_query_agent(llm, llm_tool, spec, requests, True)
-    try:
-        while True:
-            print(agent.run(read_input()))
-    except (KeyboardInterrupt, EOFError):
-        # Quit gracefully
-        pass
