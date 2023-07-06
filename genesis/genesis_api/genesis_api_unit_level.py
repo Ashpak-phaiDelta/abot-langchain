@@ -4,6 +4,9 @@ import pandas as pd
 
 from .base import create_api_tool
 
+from langchain.agents import AgentExecutor, initialize_agent
+from langchain.tools.base import Tool
+from langchain.agents.agent_types import AgentType
 from langchain.chains import OpenAPIEndpointChain
 from langchain.chains.api.openapi.chain import OpenAPIEndpointChain
 
@@ -13,16 +16,7 @@ from typing import Callable
 
 def get_tool_genesis_unit_sensor_list(llm, spec, requests, verbose: bool = False):
     def process_chain_output(chain: OpenAPIEndpointChain) -> Callable[..., str]:
-        class ParamModel(BaseModel):
-            original_query: str
-            location_id: int
-            unit_id: int
         def unit_sensor_summary(query: str) -> str:
-            # schema = ParamModel.parse_obj(json.loads(query))
-            # params_jsonified = json.dumps({
-            #     "warehouse_id": schema.location_id,
-            #     "unit_id": schema.unit_id
-            # })
             try:
                 response_data = chain.run(query)
                 resp_json = json.loads(response_data)
@@ -65,14 +59,75 @@ def get_tool_genesis_unit_sensor_list(llm, spec, requests, verbose: bool = False
         llm, spec, requests,
         '/metrics/warehouse/{warehouse_id}/unit/{unit_id}',
         name='unit_sensor_summary',
-        description='''Use to get a summary and list of all sensors at unit-level/location given the `location_id` value. Can be used to search a sensor by name. It can give a list of sensors in the unit-level (within a warehouse), their ID, state (normal, out_of_range), etc. eg: 'How many sensors are out_of_range in unit X?' or 'How many sensors are in unit Abc?'. You can infer `location_id` from tool "location_list_all_location_names" `unit_id` from tool "warehouse_unit_list_summary", else ask user to enter warehouse name. Following parameters are REQUIRED, passed as valid stringified-json:
-{{"original_query": str - $The query user had given$, "location_id": int - $the ID (1,2,etc) of the location/warehouse that the user requested. If not known, use tool "location_list_all_location_names" to get first do not assume. Make SURE location_id is correct before using$, "unit_id": int - $the ID (1,2,etc) of the unit that the user requested. If not known, use tool "warehouse_unit_list_summary" to get first, do not assume. Make SURE unit_id is correct before using$}}
-The text between $text$ are instructions for you''',
+        description='''Use to get a summary and list of all sensors at unit-level/location given the `warehouse_id` and `unit_id` value, not the name. Provide input as valid stringified JSON with the parameters. eg: "{{\\"warehouse_id\\": 1}}"''',
         verbose=verbose,
         output_processor=process_chain_output
+    )
+
+
+
+def get_tool_genesis_unit_search(llm, spec, requests, verbose: bool = False):
+    def unit_search(query: str) -> str:
+        print("Query:", query)
+        return 'Not found'
+    return Tool.from_function(
+        func=unit_search,
+        name='unit_search',
+        description='''Use to find the id of a unit from the unit's name. For example, unit named "Cipla" can return id 1000, "B2 Basement" can be 1001, etc. This ID is used for other tools. Provide input only as valid stringified json string. Eg: "{{\\"unit_name_query\\": "$name of the unit that user requested$", \\"warehouse\\": $Warehouse name if provided (optional). Omit field if not.$}}". The parts between $ are instructions for you.''',
+        verbose=verbose
+    )
+
+
+
+def get_unit_level_query_agent(llm, llm_for_tool, spec, requests, verbose: bool = False) -> AgentExecutor:
+    return initialize_agent(
+        [
+            get_tool_genesis_unit_sensor_list(llm_for_tool, spec, requests, verbose),
+            get_tool_genesis_unit_search(llm_for_tool, spec, requests, verbose)
+        ],
+        llm,
+        agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION,
+        agent_kwargs=dict(
+            system_message="""You are a powerful API client Assistant that executes the correct APIs from schemas of their parameters from the given query. You are going to be asked about unit-level details or unit-level sensors in an IoT application, which contains warehouses, and units (rooms) are within warehouses. You can access tools that perform the API request and return observation.
+For example: `how many units are there?`, `In Cipla unit, which sensors are out?`, `B2 basement status`
+Do not make up an answer, if you can't produce the final answer due to no tools satisfying, say "I don't know" and elaborate on what the user could do to improve query.
+
+Make sure to strictly follow "RESPONSE FORMAT INSTRUCTIONS" to produce all output.
+
+Overall, Assistant is a powerful tool that can help with a wide range of tasks and provide valuable insights and information on a wide range of topics. Whether you need help with a specific question or just want to have a conversation about a particular topic, Assistant is here to assist. If you are unable to answer a question, ask user to provide the needed information or say `I don't know`
+
+TOOLS:
+------
+
+You have access to the following tools: """, # For Chat-type LLM
+        )
     )
 
 
 __all__ = [
     'get_tool_genesis_unit_sensor_list'
 ]
+
+if __name__ == '__main__':
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    from langchain.requests import Requests
+    from ..basic_llms import llm, llm_tool
+    from ..genesis_agent import fetch_genesis_spec, get_auth_token
+    from ..utils import read_input
+
+    # Requests with auth token
+    requests = Requests(headers={"Authorization": "Bearer %s" % get_auth_token()})
+
+    # Genesis API specifications (OpenAPI)
+    spec = fetch_genesis_spec()
+
+    agent = get_unit_level_query_agent(llm, llm_tool, spec, requests, True)
+    try:
+        while True:
+            print(agent.run(read_input()))
+    except (KeyboardInterrupt, EOFError):
+        # Quit gracefully
+        pass
