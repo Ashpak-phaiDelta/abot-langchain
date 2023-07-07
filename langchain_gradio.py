@@ -14,6 +14,8 @@ from langchain.schema import AgentAction, AgentFinish, LLMResult
 
 from langchain.llms.openai import OpenAI
 from langchain.chat_models.openai import ChatOpenAI
+from langchain.llms.llamacpp import LlamaCpp
+from langchain.llms.gpt4all import GPT4All
 
 from dotenv import load_dotenv
 import gradio as gr
@@ -27,7 +29,11 @@ class LLMOutputMode(str, enum.Enum):
 
 
 def get_llm() -> BaseLLM:
-    return ChatOpenAI(streaming=True)
+    return OpenAI(
+        max_tokens=256,
+        streaming=True,
+        temperature=0.7
+    )
 
 
 def load_chain_module_from_path(chain_path: str, perform_reload: bool = False):
@@ -217,15 +223,17 @@ with gr.Blocks().queue(20) as demo:
 
         with gr.Row():
             tb_chain_path = gr.Textbox(
+                label="Chain factory function",
                 placeholder="Path to the chain module",
                 show_label=True,
                 lines=1,
                 type="text",
-                scale=3
+                scale=3,
+                show_progress='minimal'
             )
             reload_chain_btn = gr.Button("Reload chain", size='sm')
         gr.Examples(
-            examples=["doc_parse:ask_doc_chain", "genesis.chat_chain:agent_chain"],
+            examples=["doc_parse:ask_doc_chain", "doc_parse:vectorstore_agent", "genesis.chat_chain:agent_chain"],
             inputs=tb_chain_path,
             examples_per_page=3
         )

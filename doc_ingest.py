@@ -2,51 +2,24 @@
 import os
 from typing import IO
 from tempfile import _TemporaryFileWrapper
-from io import BufferedRandom
 
 from doc_db import db
 
-from langchain.document_loaders import (
-    CSVLoader,
-    EverNoteLoader,
-    PyMuPDFLoader,
-    TextLoader,
-    UnstructuredEmailLoader,
-    UnstructuredEPubLoader,
-    UnstructuredHTMLLoader,
-    UnstructuredMarkdownLoader,
-    UnstructuredPowerPointLoader,
-    UnstructuredWordDocumentLoader,
-    UnstructuredExcelLoader,
-    UnstructuredFileIOLoader
-)
-
+from langchain.document_loaders import UnstructuredFileIOLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 
 from typing import List
 
 
-LOADER_MAPPING = {
-    ".csv": (CSVLoader, {}),
-    # ".docx": (Docx2txtLoader, {}),
-    ".doc": (UnstructuredWordDocumentLoader, {}),
-    ".docx": (UnstructuredWordDocumentLoader, {}),
-    ".enex": (EverNoteLoader, {}),
-    ".epub": (UnstructuredEPubLoader, {}),
-    ".html": (UnstructuredHTMLLoader, {}),
-    ".md": (UnstructuredMarkdownLoader, {}),
-    ".pdf": (PyMuPDFLoader, {}),
-    ".ppt": (UnstructuredPowerPointLoader, {}),
-    ".pptx": (UnstructuredPowerPointLoader, {}),
-    ".txt": (TextLoader, {"encoding": "utf8"}),
-    ".xlsx": (UnstructuredExcelLoader, {})
-    # Add more mappings for other file extensions and loaders as needed
-}
+class UnstructuredFileIOMetadataLoader(UnstructuredFileIOLoader):
+    def _get_metadata(self) -> dict:
+        return {"source": self.unstructured_kwargs.get('metadata_filename')}
 
-SPLIT_CHUNK_SIZE = 500
+
+SPLIT_CHUNK_SIZE = 300
 """How many characters to split each chunk at"""
-SPLIT_CHUNK_OVERLAP = 50
+SPLIT_CHUNK_OVERLAP = 20
 """How many characters between two chunks are same"""
 
 
@@ -66,7 +39,7 @@ def dump_documents_to_db(documents: List[Document]) -> int:
 def handle_document(file: IO) -> int:
     try:
         metadata_name = os.path.basename(file.name)
-        loader = UnstructuredFileIOLoader(file, metadata_filename=metadata_name)
+        loader = UnstructuredFileIOMetadataLoader(file, metadata_filename=metadata_name)
         return dump_documents_to_db(loader.load())
     finally:
         pass
