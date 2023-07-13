@@ -14,7 +14,7 @@ from vectorstores.genesis_pg import genesisdb
 
 
 combine_prompt_template = """Given the following extracted parts of a long document of json format and a question, create a final answer with references ("SOURCES"). 
-If you don't know the answer, just say that you don't know. Don't try to make up an answer. Provide concise and direct answers if possible. Provide output as markdown text, such as lists.
+If you don't know the answer, just say that you don't know. Don't try to make up an answer. Provide concise and direct answers if possible. Provide output as markdown text, such as lists even if not asked explicitly. Make use of alias names (sensor_alias, unit_alias, etc.) whenever possible (if present).
 ALWAYS return a "SOURCES" part in your answer.
 
 QUESTION: What is the unit status?
