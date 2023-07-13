@@ -9,16 +9,21 @@ from tempfile import _TemporaryFileWrapper
 
 from langchain.llms.base import BaseLLM
 from langchain.chains.base import Chain
+from langchain.vectorstores.base import VectorStore
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.schema import AgentAction, AgentFinish, LLMResult
 
 from langchain.llms.openai import OpenAI
 from langchain.chat_models.openai import ChatOpenAI
-from langchain.llms.llamacpp import LlamaCpp
-from langchain.llms.gpt4all import GPT4All
+from langchain.vectorstores import Chroma, PGVector
+
+from vectorstores.doc_chroma import chromadb
+from vectorstores.genesis_pg import genesisdb
+from sqlalchemy.orm import Session
 
 from dotenv import load_dotenv
 import gradio as gr
+import pandas as pd
 
 load_dotenv()
 
@@ -28,11 +33,80 @@ class LLMOutputMode(str, enum.Enum):
     STREAM = "stream"
 
 
+TARGET_SOURCE_CHUNKS = 12
+
+ALL_VECTORSTORES: Dict[str, Optional[VectorStore]] = dict(
+    none = None,
+    chromadb = chromadb,
+    genesisdb = genesisdb,
+)
+
+CHAIN_EXAMPLES = [
+    ["doc_parse:ask_doc_chain"],
+    ["doc_parse:ask_genesis_chain"],
+    ["doc_parse:vectorstore_agent"],
+    ["genesis.chat_chain:agent_chain"]
+]
+
+# vectorstore collection utils
+
+def vs_doc_list(vs: str, *needed_info) -> List:
+    vstore = ALL_VECTORSTORES.get(vs)
+    all_docs = dict()
+    response = []
+    if vstore is None:
+        return response
+
+    if isinstance(vstore, Chroma):
+        result = vstore._collection.get()
+        for doc_id, doc_data, metadata in zip(result['ids'], result['documents'], result['metadatas']):
+            if metadata.get('source'):
+                if metadata['source'] not in all_docs:
+                    all_docs[metadata['source']] = ([], [])
+                all_docs[metadata['source']][0].append(doc_id)
+                all_docs[metadata['source']][1].append(doc_data)
+    elif isinstance(vstore, PGVector):
+        with Session(vstore._conn) as session:
+            collection_data = vstore.get_collection(session)
+            if collection_data:
+                for embedding in collection_data.embeddings:
+                    doc_id = embedding.uuid
+                    doc_data = embedding.document
+                    metadata = embedding.cmetadata
+                    if metadata.get('source'):
+                        if metadata['source'] not in all_docs:
+                            all_docs[metadata['source']] = ([], [])
+                        all_docs[metadata['source']][0].append(doc_id)
+                        all_docs[metadata['source']][1].append(doc_data)
+                print()
+
+    for doc_source, (doc_ids, doc_chunks) in all_docs.items():
+        r = []
+        for need in needed_info:
+            if need == 'source':
+                r.append(doc_source)
+            elif need == 'chunks':
+                r.append(len(doc_chunks))
+            elif need == 'size':
+                r.append(sum(len(x) for x in doc_chunks))
+        response.append(r)
+    return response
+
+def vs_collection_clear(vs: str):
+    vstore = ALL_VECTORSTORES.get(vs)
+    if vstore is None:
+        return
+    vstore.delete()
+
+
+# LLM utils
+
 def get_llm() -> BaseLLM:
     return OpenAI(
-        max_tokens=256,
+        max_tokens=256, # 4096
         streaming=True,
-        temperature=0.7
+        temperature=0,
+        verbose=True
     )
 
 
@@ -45,22 +119,56 @@ def load_chain_module_from_path(chain_path: str, perform_reload: bool = False):
     return module, chain_var
 
 
-def load_chain(chain_path: str, llm: BaseLLM, perform_reload: bool = False):
-    if chain_path:
-        chain_module, chain_var = load_chain_module_from_path(chain_path, perform_reload)
-        chain_factory: Callable[[BaseLLM], Chain] = getattr(chain_module, chain_var)
-        return chain_factory(llm=llm)
+def load_chain(chain_path: str, llm: BaseLLM, perform_reload: bool = False, progress = gr.Progress()) -> Tuple[str, Chain]:
+    load_iter = progress.tqdm(range(3), desc="Loading")
+    if isinstance(chain_path, (str, list)):
+        if isinstance(chain_path, list) and len(chain_path) > 0:
+            chain_path = chain_path[0]
+        if len(chain_path) == 0:
+            raise ValueError("Chain path is empty!")
 
+        chain_args = {}
+        chain_args['llm'] = llm
+
+        if True:
+            chain_args['retriever'] = ALL_VECTORSTORES['genesisdb'].as_retriever(
+                search_kwargs={"k": TARGET_SOURCE_CHUNKS},
+                search_type='similarity',
+            )
+
+        load_iter.update()
+        chain_module, chain_var = load_chain_module_from_path(chain_path, perform_reload)
+        load_iter.update()
+        chain_factory: Callable[[BaseLLM], Chain] = getattr(chain_module, chain_var)
+        try:
+            chain_obj = chain_factory(**chain_args)
+        except TypeError:
+            print("Chain %s doesn't support retrievers. Disabling." % chain_path)
+            chain_args.pop('retriever', None)
+            chain_obj = chain_factory(**chain_args)
+        load_iter.update()
+        return chain_path, chain_obj
+
+    raise ValueError("Unable to load the chain \"%s\"" % str(chain_path))
 
 def reload_chain(chain_path: str, llm: BaseLLM):
     return load_chain(chain_path, llm, perform_reload=True)
 
 
-async def handle_upload(files: List[_TemporaryFileWrapper]):
+def get_uploaded_files_list(vs: str) -> pd.DataFrame:
+    return pd.DataFrame(vs_doc_list(vs, "source", "chunks", "size"), columns=["source", "chunks", "size (characters)"])
+
+def clear_collection(vs: str, progress=gr.Progress()):
+    vs_collection_clear(vs)
+    return get_uploaded_files_list(vs)
+
+async def handle_upload(files: List[_TemporaryFileWrapper], vs: str, progress=gr.Progress()):
     # Note: The _TemporaryFileWrapper is only useful for getting the filename as it has no access to its content
     from doc_ingest import upload_files
-    upload_task = asyncio.get_event_loop().run_in_executor(None, upload_files, *files)
-    return await upload_task
+    vstore = ALL_VECTORSTORES.get(vs)
+    upload_task = asyncio.get_event_loop().run_in_executor(None, upload_files, vstore, *files)
+    new_uploaded_files = await upload_task
+    return get_uploaded_files_list(vs)
 
 
 class QueueCallbackHandler(BaseCallbackHandler):
@@ -218,62 +326,76 @@ class ChatWrapper:
                 return
 
 with gr.Blocks().queue(20) as demo:
+    loaded_llm = gr.State(get_llm)
+    loaded_chain = gr.State()
+    prepared_message = gr.State('')
+
     with gr.Row(equal_height=False):
         gr.Markdown("# PrivateGPT Demo")
 
-        with gr.Row():
-            tb_chain_path = gr.Textbox(
-                label="Chain factory function",
-                placeholder="Path to the chain module",
-                show_label=True,
-                lines=1,
-                type="text",
-                scale=3,
-                show_progress='minimal'
-            )
-            reload_chain_btn = gr.Button("Reload chain", size='sm')
-        gr.Examples(
-            examples=["doc_parse:ask_doc_chain", "doc_parse:vectorstore_agent", "genesis.chat_chain:agent_chain"],
-            inputs=tb_chain_path,
-            examples_per_page=3
+    with gr.Row():
+        tb_chain_path = gr.Textbox(
+            label="Chain factory function",
+            placeholder="Path to the chain module",
+            show_label=True,
+            lines=1,
+            type="text",
+            scale=3
         )
-        rd_output_mode = gr.Radio(
-            [LLMOutputMode.DIRECT, LLMOutputMode.STREAM],
-            value=LLMOutputMode.DIRECT,
-            label="Output mode",
-            interactive=True
+        with gr.Column(scale=1):
+            load_chain_btn = gr.Button("Load chain", size='sm')
+            reload_chain_btn = gr.Button("Reload chain", size='sm')
+
+        example_dataset = gr.Dataset(
+            components=[gr.Textbox(visible=False)],
+            samples=CHAIN_EXAMPLES,
+            label="Preset chain",
+            type="values",
+            samples_per_page=3
         )
 
     chat_engine = ChatWrapper()
     chatbot = gr.Chatbot()
 
-    with gr.Row():
-        txt_message = gr.Textbox(
-            label="Chat",
-            placeholder="Example: Describe the contents",
-            lines=1,
-            scale=11
-        )
-        submit = gr.Button(value="Send", variant="secondary", scale=1)
+    with gr.Column():
+        with gr.Row():
+            txt_message = gr.Textbox(
+                label="Chat",
+                placeholder="Example: Describe the contents",
+                lines=1,
+                scale=11,
+                show_label=False
+            )
+            submit = gr.Button(value="Send", variant="secondary", scale=1)
+
+        with gr.Row(variant="compact"):
+            rd_output_mode = gr.Radio(
+                [LLMOutputMode.DIRECT, LLMOutputMode.STREAM],
+                value=LLMOutputMode.DIRECT,
+                label="Output mode",
+                interactive=True
+            )
+            dd_select_vs = gr.Dropdown(
+                choices=ALL_VECTORSTORES.keys(),
+                value=list(ALL_VECTORSTORES.keys())[0],
+                label="Vector Store",
+                show_label=True,
+                allow_custom_value=False,
+                type="value"
+            )
 
     with gr.Row():
-        file_upload_box = gr.File(file_count="multiple")
-
-    gr.Examples(
-        examples=[
-            "Hi!",
-            "Whats 2 + 2?",
-            "Talk about the documents loaded",
-            "List of documents"
-        ],
-        inputs=txt_message
-    )
+        file_upload_box = gr.File(file_count="multiple", label="Upload files", show_label=True, interactive=True)
+        with gr.Column():
+            list_files_ready = gr.DataFrame(
+                value=lambda: get_uploaded_files_list(dd_select_vs.value),
+                type="pandas",
+                label="Documents in collection",
+                interactive=False
+            )
+            btn_clear_col = gr.Button("Clear entire collection", variant="stop", size="sm")
 
     gr.HTML("Demo application of a Langchain-based PrivateGPT.")
-
-    loaded_llm = gr.State(get_llm)
-    loaded_chain = gr.State()
-    prepared_message = gr.State('')
 
     clr_msg_box = lambda: ''
 
@@ -285,9 +407,16 @@ with gr.Blocks().queue(20) as demo:
         .success(clr_msg_box, outputs=txt_message) \
         .success(chat_engine.generate, inputs=[prepared_message, chatbot, rd_output_mode, loaded_chain], outputs=chatbot)
 
-    tb_chain_path.change(load_chain, inputs=[tb_chain_path, loaded_llm], outputs=loaded_chain)
-    reload_chain_btn.click(reload_chain, inputs=[tb_chain_path, loaded_llm], outputs=loaded_chain)
-    file_upload_box.upload(handle_upload, inputs=[file_upload_box])
+    example_dataset.select(load_chain, inputs=[example_dataset, loaded_llm], outputs=[tb_chain_path, loaded_chain],
+        show_progress='minimal')
+    load_chain_btn.click(load_chain, inputs=[tb_chain_path, loaded_llm], outputs=[tb_chain_path, loaded_chain],
+        show_progress='minimal')
+    reload_chain_btn.click(reload_chain, inputs=[tb_chain_path, loaded_llm], outputs=[tb_chain_path, loaded_chain],
+        show_progress='minimal')
+
+    dd_select_vs.select(get_uploaded_files_list, inputs=dd_select_vs, outputs=list_files_ready)
+    file_upload_box.upload(handle_upload, inputs=[file_upload_box, dd_select_vs], outputs=list_files_ready, show_progress='minimal')
+    btn_clear_col.click(clear_collection, inputs=dd_select_vs, outputs=list_files_ready)
 
 if __name__ == "__main__":
     demo.launch(debug=True)

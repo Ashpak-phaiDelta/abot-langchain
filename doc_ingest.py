@@ -3,10 +3,10 @@ import os
 from typing import IO
 from tempfile import _TemporaryFileWrapper
 
-from doc_db import db
+from vectorstores.hf_embedding import text_doc_splitter
 
 from langchain.document_loaders import UnstructuredFileIOLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.vectorstores.base import VectorStore
 from langchain.schema import Document
 
 from typing import List
@@ -23,31 +23,27 @@ SPLIT_CHUNK_OVERLAP = 20
 """How many characters between two chunks are same"""
 
 
-def dump_documents_to_db(documents: List[Document]) -> int:
+def dump_documents_to_db(store: VectorStore, documents: List[Document]) -> int:
     # Split document into chunks (with some overlapping content)
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=SPLIT_CHUNK_SIZE,
-        chunk_overlap=SPLIT_CHUNK_OVERLAP
-    )
-    texts: List[Document] = text_splitter.split_documents(documents)
+    texts: List[Document] = text_doc_splitter.split_documents(documents)
 
-    # db.delete_collection()
-    db.add_documents(texts)
-    db.persist()
+    store.add_documents(texts)
+    if hasattr(store, 'persist'):
+        store.persist()
     return len(texts)
 
-def handle_document(file: IO) -> int:
+def handle_document(store: VectorStore, file: IO) -> int:
     try:
         metadata_name = os.path.basename(file.name)
         loader = UnstructuredFileIOMetadataLoader(file, metadata_filename=metadata_name)
-        return dump_documents_to_db(loader.load())
+        return dump_documents_to_db(store, loader.load())
     finally:
         pass
 
 
-def upload_files(*files: _TemporaryFileWrapper):
+def upload_files(store: VectorStore, *files: _TemporaryFileWrapper):
     for file in files:
         with open(file.name, 'rb') as f:
             print("Uploading file %s..." % file.name)
-            num_document_chunks = handle_document(f)
+            num_document_chunks = handle_document(store, f)
             print("%s uploaded, %d chunks" % (file.name, num_document_chunks))

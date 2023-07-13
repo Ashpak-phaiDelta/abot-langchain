@@ -5,6 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "Gradio langchain",
             "type": "python",
             "request": "launch",
@@ -17,6 +25,13 @@
             "type": "python",
             "request": "launch",
             "module": "genesis",
+            "justMyCode": false
+        },
+        {
+            "name": "Debug",
+            "type": "python",
+            "request": "launch",
+            "module": "genesis.genesis_api.genesis_api_unit_level",
             "justMyCode": false
         }
     ]

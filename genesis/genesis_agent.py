@@ -50,23 +50,36 @@ def get_genesis_api_agent(llm: BaseLLM, *additional_tools: BaseTool, llm_for_too
     )
 
     # Create Agents for various levels
-    unit_level_agent = get_unit_level_query_agent(llm, llm_for_tool=llm_for_tool, spec=spec, requests=requests, memory=memory, verbose=tool_verbose)
+    # warehouse_level_agent = get_warehouse_level_query_agent(llm, llm_for_tool=llm_for_tool, spec=spec, requests=requests, memory=memory, verbose=tool_verbose)
+    # unit_level_agent = get_unit_level_query_agent(llm, llm_for_tool=llm_for_tool, spec=spec, requests=requests, memory=memory, verbose=tool_verbose)
 
     # List of tools available to the agent
     genesis_tools: List[BaseTool] = [
-        get_tool_genesis_location_list(llm_for_tool, spec, requests, verbose=tool_verbose),
-        get_tool_genesis_location_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
+        # get_tool_genesis_location_list(llm_for_tool, spec, requests, verbose=tool_verbose),
+        # get_tool_genesis_location_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
         # get_tool_genesis_warehouse_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
         # get_tool_genesis_warehouse_unit_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
         ## get_tool_genesis_unit_sensor_list(llm_for_tool, spec, requests, verbose=tool_verbose),
         # get_tool_genesis_sensor_list(llm, spec, requests, verbose=tool_verbose),
 
-        # Unit-level query agent
-        Tool.from_function(
-            func=unit_level_agent.run,
-            name='agent_genesis_unit_level_query',
-            description="Use for querying unit information or unit-level sensors of a specific unit, or to find unit id given the name"
-        ),
+        get_tool_genesis_warehouse_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
+        get_tool_genesis_warehouse_unit_summary(llm_for_tool, spec, requests, verbose=tool_verbose),
+        get_tool_genesis_unit_sensor_list(llm_for_tool, spec, requests, verbose=tool_verbose),
+        get_tool_genesis_unit_search(llm_for_tool, spec, requests, verbose=tool_verbose),
+
+        # # Warehouse-level quyery agent
+        # Tool.from_function(
+        #     func=warehouse_level_agent.run,
+        #     name='agent_genesis_warehouse_level_query',
+        #     description="Use wwhen querying warehouse information or warehouse-level sensors of a specific warehouse, or summary or list of units within the specific warehouse"
+        # ),
+
+        # # Unit-level query agent
+        # Tool.from_function(
+        #     func=unit_level_agent.run,
+        #     name='agent_genesis_unit_level_query',
+        #     description="Use for querying unit information or unit-level sensors of a specific unit"
+        # ),
 
         # TODO @Ashpak add sensor level agent tool here
 

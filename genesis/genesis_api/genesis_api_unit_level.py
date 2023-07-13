@@ -10,6 +10,7 @@ from langchain.agents.agent_types import AgentType
 from langchain.chains import OpenAPIEndpointChain
 from langchain.chains.api.openapi.chain import OpenAPIEndpointChain
 
+from .genesis_api_utility import get_tool_genesis_unit_search
 from ..prompts import is_chat_model, get_agent_prompt, GENESIS_UNIT_LEVEL_AGENT_PROMPT_PREFIX
 
 from typing import Callable
@@ -70,11 +71,7 @@ def get_unit_level_query_agent(llm, llm_for_tool, spec, requests, memory, verbos
     return initialize_agent(
         [
             get_tool_genesis_unit_sensor_list(llm_for_tool, spec, requests, verbose),
-            Tool(
-                func=lambda q: "Error: Need to know warehouse name",
-                name="get_unit_status",
-                description="Use when status of a unit within a warehouse is needed, such as \"B2 Basement status\", \"Cipla unit information\", etc. It gives status such as how many sensors are normal/inactive/out, unit state."
-            )
+            get_tool_genesis_unit_search(llm_for_tool, spec, requests, verbose)
         ],
         llm,
         agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION if is_chat_model(llm) else AgentType.CONVERSATIONAL_REACT_DESCRIPTION,

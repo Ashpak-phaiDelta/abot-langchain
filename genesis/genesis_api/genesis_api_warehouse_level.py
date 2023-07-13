@@ -4,11 +4,26 @@ import pandas as pd
 
 from .base import create_api_tool
 
-from langchain.tools.base import Tool
 from langchain.chains import OpenAPIEndpointChain
 from langchain.chains.api.openapi.chain import OpenAPIEndpointChain
 
 from typing import Callable
+
+import json
+import pandas as pd
+
+from .base import create_api_tool
+
+from langchain.agents import AgentExecutor, initialize_agent
+from langchain.tools.base import Tool
+from langchain.agents.agent_types import AgentType
+from langchain.chains.api.openapi.chain import OpenAPIEndpointChain
+
+from .genesis_api_utility import get_tool_genesis_unit_search
+from ..prompts import is_chat_model, get_agent_prompt, GENESIS_UNIT_LEVEL_AGENT_PROMPT_PREFIX
+
+from typing import Callable
+
 
 
 def get_tool_genesis_warehouse_summary(llm, spec, requests, verbose: bool = False):
@@ -83,13 +98,13 @@ def get_tool_genesis_warehouse_unit_summary(llm, spec, requests, verbose: bool =
             if len(warlvl_df) == 0:
                 return 'No units are present in this warehouse'
 
-            response_text_summary += "> Data format: Unit ID // Name (alias) // Number of out_of_range sensors // Status\n"
+            response_text_summary += "> Data format: Unit ID, `Name (alias)`, `Number of out_of_range sensors`, `Status`\n"
 
             for lbl, unit_row in warlvl_df.iterrows():
                 name = unit_row['Unit Name'] or ''
                 if unit_row['Unit Alias'] is not None:
                     name += '(%s)' % unit_row['Unit Alias']
-                response_text_summary += '{} // {} // {} // {}\n'.format(
+                response_text_summary += '{}, `{}`, `{}`, `{}`\n'.format(
                     unit_row['Unit Id'],
                     name,
                     unit_row['Value'],
@@ -110,21 +125,25 @@ The text between $text$ are instructions for you''',
     )
 
 
-def get_tool_genesis_unit_search(llm, spec, requests, verbose: bool = False):
-    def unit_search(query: str) -> str:
-        print("Query:", query)
-        return 'Not found'
-    return Tool.from_function(
-        func=unit_search,
-        name='unit_search',
-        description='''Use to find the id of a unit from the unit's name. For example, unit named "Cipla" can return id 1000, "B2 Basement" can be 1001, etc. This ID is used for other tools. Provide input only of the Unit name to search for, for example, "Cipla", "B2 Basement", and will return the id of the unit, else "Not found".''',
-        verbose=verbose
+def get_warehouse_level_query_agent(llm, llm_for_tool, spec, requests, memory, verbose: bool = False):
+    return initialize_agent(
+        [
+            get_tool_genesis_warehouse_summary(llm_for_tool, spec, requests, verbose),
+            get_tool_genesis_warehouse_unit_summary(llm_for_tool, spec, requests, verbose),
+            get_tool_genesis_unit_search(llm_for_tool, spec, requests, verbose)
+        ],
+        llm,
+        agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION if is_chat_model(llm) else AgentType.CONVERSATIONAL_REACT_DESCRIPTION,
+        verbose=verbose,
+        memory=memory,
+        agent_kwargs=get_agent_prompt(llm,
+            prefix_prompt=GENESIS_UNIT_LEVEL_AGENT_PROMPT_PREFIX
+        )
     )
-
 
 
 __all__ = [
     'get_tool_genesis_warehouse_summary',
     'get_tool_genesis_warehouse_unit_summary',
-    'get_tool_genesis_unit_search'
+    'get_warehouse_level_query_agent'
 ]
