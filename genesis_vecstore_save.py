@@ -15,14 +15,15 @@ import requests
 import itertools
 from urllib.parse import urljoin
 from typing import Optional, List, Union
-from typing_extensions import NotRequired
 
 from vectorstores.doc_chroma import chromadb
 from vectorstores.genesis_pg import genesisdb
+from genesis.config import GenesisSettings
 
+
+_settings = GenesisSettings()
 
 GENESIS_BASE_URL = "https://api.phaidelta.com/backend"
-GENESIS_AUTH_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZF91c2VyIjoxMywiaWF0IjoxNjg3NzU3ODU4fQ.14AjrkViISuzUZMrW2WJlAKLxhDgWHIJFWYkhBrkaLQ'
 
 SPLIT_CHUNK_SIZE = 500
 SPLIT_CHUNK_OVERLAP = 30
@@ -351,7 +352,7 @@ if __name__ == "__main__":
         docs_to_save: List[Document] = []
         sess.headers.update({
             'Content-Type':'application/json',
-            'Authorization': 'Bearer %s' % GENESIS_AUTH_TOKEN
+            'Authorization': 'Bearer %s' % _settings.auth_token
         })
 
         import time
