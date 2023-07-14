@@ -42,6 +42,7 @@ ALL_VECTORSTORES: Dict[str, Optional[VectorStore]] = dict(
 )
 
 CHAIN_EXAMPLES = [
+    ["vanilla_llm:simple"],
     ["doc_parse:ask_doc_chain"],
     ["doc_parse:ask_genesis_chain"],
     ["doc_parse:vectorstore_agent"],
