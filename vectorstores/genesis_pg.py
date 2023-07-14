@@ -1,17 +1,27 @@
 
 
 from langchain.vectorstores.pgvector import PGVector
+from pydantic import BaseSettings, PostgresDsn
 
 from .hf_embedding import embeddings
 
 
-GENESIS_COLLECTION_NAME = 'genesis'
-GENESIS_HOST_URL = "https://genesis.phaidelta.com"
+class GenesisVectorStoreSettings(BaseSettings):
+    collection_name: str = 'genesis'
+    host_url: str
+    db_connection_string: PostgresDsn
+
+    class Config:
+        env_file = '.env'
+        env_prefix = 'genesis_'
+
+
+_settings = GenesisVectorStoreSettings()
 
 
 genesisdb = PGVector(
-    connection_string="postgresql+psycopg2://postgres:Genesis%40123@uat.phaidelta.com:5432/abot_vectorstore",
+    connection_string=_settings.db_connection_string,
     embedding_function=embeddings,
-    collection_name=GENESIS_COLLECTION_NAME,
-    collection_metadata={"host": GENESIS_HOST_URL}
+    collection_name=_settings.collection_name,
+    collection_metadata={"host": _settings.host_url}
 )
