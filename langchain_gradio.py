@@ -2,6 +2,7 @@
 import enum
 from typing import Optional, List, Tuple, Dict, Any, Union, Callable
 
+import logging
 import asyncio
 import queue
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -26,6 +27,8 @@ import gradio as gr
 import pandas as pd
 
 load_dotenv()
+
+LOGGER = logging.getLogger(__name__)
 
 
 class LLMOutputMode(str, enum.Enum):
@@ -79,7 +82,6 @@ def vs_doc_list(vs: str, *needed_info) -> List:
                             all_docs[metadata['source']] = ([], [])
                         all_docs[metadata['source']][0].append(doc_id)
                         all_docs[metadata['source']][1].append(doc_data)
-                print()
 
     for doc_source, (doc_ids, doc_chunks) in all_docs.items():
         r = []
@@ -120,7 +122,12 @@ def load_chain_module_from_path(chain_path: str, perform_reload: bool = False):
     return module, chain_var
 
 
-def load_chain(chain_path: str, llm: BaseLLM, perform_reload: bool = False, progress = gr.Progress()) -> Tuple[str, Chain]:
+def load_chain(
+        chain_path: str,
+        llm: BaseLLM,
+        vectorstore_name: Optional[str] = None,
+        perform_reload: bool = False,
+        progress = gr.Progress()) -> Tuple[str, Chain]:
     load_iter = progress.tqdm(range(3), desc="Loading")
     if isinstance(chain_path, (str, list)):
         if isinstance(chain_path, list) and len(chain_path) > 0:
@@ -131,8 +138,9 @@ def load_chain(chain_path: str, llm: BaseLLM, perform_reload: bool = False, prog
         chain_args = {}
         chain_args['llm'] = llm
 
-        if True:
-            chain_args['retriever'] = ALL_VECTORSTORES['genesisdb'].as_retriever(
+        # TODO: Check if the chain factory supports retriever in the first place
+        if vectorstore_name is not None and ALL_VECTORSTORES.get(vectorstore_name):
+            chain_args['retriever'] = ALL_VECTORSTORES[vectorstore_name].as_retriever(
                 search_kwargs={"k": TARGET_SOURCE_CHUNKS},
                 search_type='similarity',
             )
@@ -144,7 +152,7 @@ def load_chain(chain_path: str, llm: BaseLLM, perform_reload: bool = False, prog
         try:
             chain_obj = chain_factory(**chain_args)
         except TypeError:
-            print("Chain %s doesn't support retrievers. Disabling." % chain_path)
+            LOGGER.warning("Chain %s doesn't support retrievers. Disabling." % chain_path)
             chain_args.pop('retriever', None)
             chain_obj = chain_factory(**chain_args)
         load_iter.update()
@@ -152,8 +160,9 @@ def load_chain(chain_path: str, llm: BaseLLM, perform_reload: bool = False, prog
 
     raise ValueError("Unable to load the chain \"%s\"" % str(chain_path))
 
-def reload_chain(chain_path: str, llm: BaseLLM):
-    return load_chain(chain_path, llm, perform_reload=True)
+
+def reload_chain(chain_path: str, llm: BaseLLM, vectorstore_name: Optional[str] = None):
+    return load_chain(chain_path, llm, vectorstore_name=vectorstore_name, perform_reload=True)
 
 
 def get_uploaded_files_list(vs: str) -> pd.DataFrame:
@@ -408,11 +417,11 @@ with gr.Blocks().queue(20) as demo:
         .success(clr_msg_box, outputs=txt_message) \
         .success(chat_engine.generate, inputs=[prepared_message, chatbot, rd_output_mode, loaded_chain], outputs=chatbot)
 
-    example_dataset.select(load_chain, inputs=[example_dataset, loaded_llm], outputs=[tb_chain_path, loaded_chain],
+    example_dataset.select(load_chain, inputs=[example_dataset, loaded_llm, dd_select_vs], outputs=[tb_chain_path, loaded_chain],
         show_progress='minimal')
-    load_chain_btn.click(load_chain, inputs=[tb_chain_path, loaded_llm], outputs=[tb_chain_path, loaded_chain],
+    load_chain_btn.click(load_chain, inputs=[tb_chain_path, loaded_llm, dd_select_vs], outputs=[tb_chain_path, loaded_chain],
         show_progress='minimal')
-    reload_chain_btn.click(reload_chain, inputs=[tb_chain_path, loaded_llm], outputs=[tb_chain_path, loaded_chain],
+    reload_chain_btn.click(reload_chain, inputs=[tb_chain_path, loaded_llm, dd_select_vs], outputs=[tb_chain_path, loaded_chain],
         show_progress='minimal')
 
     dd_select_vs.select(get_uploaded_files_list, inputs=dd_select_vs, outputs=list_files_ready)

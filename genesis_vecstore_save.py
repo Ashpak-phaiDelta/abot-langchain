@@ -229,6 +229,20 @@ class Genesis(BaseModel):
         ]
 
 
+def counting(responses):
+    # {
+    #     "genesis": {
+    #         "warehouse": {
+    #             "count": 0,
+    #             "state_normal": 0,
+    #             "state_inactive": 0
+    #         }
+    #     }
+    # }
+    return {
+
+    }
+
 def scrape_all_genesis(sess: LiveServerSession) -> dict:
     '''Sequential scrape of all data from APIs of Genesis'''
     response = {}
@@ -288,7 +302,7 @@ def scrape_all_genesis(sess: LiveServerSession) -> dict:
                         'sensor_unit_at': {
                             # 'unit_id': -1,
                             'unit_name': 'Warehouse-level unit',
-                            'unit_alias': 'WARLVL / %s / %s' % (loc['name'], find_loc_alias(loc) or '')
+                            'unit_alias': 'WARLVL (%s, %s)' % (loc['name'], find_loc_alias(loc) or '')
                         },
                         'sensor_location_at': {
                             # 'location_id': loc['id'],
@@ -344,6 +358,8 @@ def scrape_all_genesis(sess: LiveServerSession) -> dict:
                 ]
             } for loc in raw_responses['locations']
         ]
+        parsed['counting'] = counting(raw_responses)
+
         return response
 
 
