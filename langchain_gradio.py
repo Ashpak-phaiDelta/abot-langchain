@@ -354,7 +354,7 @@ with gr.Blocks().queue(20) as demo:
             show_label=True,
             lines=1,
             type="text",
-            scale=10
+            scale=8
         )
         with gr.Column(scale=1):
             load_chain_btn = gr.Button("Load chain", size='sm')
@@ -389,14 +389,16 @@ with gr.Blocks().queue(20) as demo:
                 label="Output mode",
                 interactive=True
             )
-            dd_select_vs = gr.Dropdown(
-                choices=ALL_VECTORSTORES.keys(),
-                value=list(ALL_VECTORSTORES.keys())[0],
-                label="Vector Store",
-                show_label=True,
-                allow_custom_value=False,
-                type="value"
-            )
+            with gr.Column():
+                dd_select_vs = gr.Dropdown(
+                    choices=ALL_VECTORSTORES.keys(),
+                    value=list(ALL_VECTORSTORES.keys())[0],
+                    label="Vector Store",
+                    show_label=True,
+                    allow_custom_value=False,
+                    type="value"
+                )
+                gr.HTML("<span>* You will need to reload the chain after changing the vector store</span>")
 
     with gr.Row():
         file_upload_box = gr.File(file_count="multiple", label="Upload files", show_label=True, interactive=True)
