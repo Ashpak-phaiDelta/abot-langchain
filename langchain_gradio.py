@@ -8,6 +8,8 @@ import queue
 from concurrent.futures.thread import ThreadPoolExecutor
 from tempfile import _TemporaryFileWrapper
 
+from pydantic import ValidationError
+
 from langchain.llms.base import BaseLLM
 from langchain.chains.base import Chain
 from langchain.vectorstores.base import VectorStore
@@ -155,6 +157,8 @@ def load_chain(
             LOGGER.warning("Chain %s doesn't support retrievers. Disabling." % chain_path)
             chain_args.pop('retriever', None)
             chain_obj = chain_factory(**chain_args)
+        except ValidationError as e:
+            raise ValueError("This chain requires a retriever to be attached. Select one from the options below.")
         load_iter.update()
         return chain_path, chain_obj
 
@@ -350,7 +354,7 @@ with gr.Blocks().queue(20) as demo:
             show_label=True,
             lines=1,
             type="text",
-            scale=3
+            scale=10
         )
         with gr.Column(scale=1):
             load_chain_btn = gr.Button("Load chain", size='sm')
@@ -359,7 +363,7 @@ with gr.Blocks().queue(20) as demo:
         example_dataset = gr.Dataset(
             components=[gr.Textbox(visible=False)],
             samples=CHAIN_EXAMPLES,
-            label="Preset chain",
+            label="Preset chains",
             type="values",
             samples_per_page=3
         )
@@ -429,4 +433,4 @@ with gr.Blocks().queue(20) as demo:
     btn_clear_col.click(clear_collection, inputs=dd_select_vs, outputs=list_files_ready)
 
 if __name__ == "__main__":
-    demo.launch(debug=True)
+    demo.launch(enable_queue=True, show_error=True)
