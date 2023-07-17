@@ -9,6 +9,7 @@ from langchain.schema import Document
 from pydantic import BaseModel, Field, Extra, parse_obj_as
 
 import enum
+import json
 import tqdm
 from mezmorize import Cache
 import requests
@@ -29,7 +30,7 @@ SPLIT_CHUNK_SIZE = 500
 SPLIT_CHUNK_OVERLAP = 30
 
 
-request_cache = Cache(CACHE_TYPE='filesystem', CACHE_DIR=".cache/")
+request_cache = Cache(CACHE_TYPE='filesystem', CACHE_DIR=".cache/requests")
 
 
 class LiveServerSession(requests.Session):
@@ -38,7 +39,7 @@ class LiveServerSession(requests.Session):
         super().__init__()
         self.base_url = base_url
 
-    @request_cache.memoize(500)
+    # @request_cache.memoize(500)
     def request(self, method, url, *args, **kwargs):
         url = urljoin(self.base_url.rstrip("/") + "/", url.lstrip("/"))
         return super().request(method, url, *args, **kwargs)
@@ -155,11 +156,13 @@ class GeoCoordinate(BaseModel):
 
 
 class GenesisLocationSummaryItem(BaseModel):
-    value: Optional[Union[float, int, str]]
+    value: Optional[Union[int, str]]
     state: Optional[GenesisItemState]
 
 
-class GenesisLocationSummaryPower(GenesisLocationSummaryItem, BaseModel):
+class GenesisLocationSummaryPower(BaseModel):
+    value: Optional[Union[float, int, str]]
+    state: Optional[GenesisItemState]
     unit: Optional[str]
 
 
@@ -229,18 +232,37 @@ class Genesis(BaseModel):
         ]
 
 
-def counting(responses):
-    # {
-    #     "genesis": {
-    #         "warehouse": {
-    #             "count": 0,
-    #             "state_normal": 0,
-    #             "state_inactive": 0
-    #         }
-    #     }
-    # }
+def counting(model: Genesis):
     return {
-
+        "description": "All totals, counts of, total number of sensors at, units, warehouses, also grouped by state. Unit normal/inactive count, number of sensors",
+        "all_warehouses": {
+            'total': len(model.locations),
+            'count_warehouses_by_state': {
+                'count_normal': len(list(filter(lambda x: x.location_health_state == GenesisItemState.NORMAL, model.locations))),
+                'count_out_of_range': len(list(filter(lambda x: x.location_health_state == GenesisItemState.OUT_OF_RANGE, model.locations))),
+                'count_inactive': len(list(filter(lambda x: x.location_health_state == GenesisItemState.INACTIVE, model.locations)))
+            }
+        },
+        "warehouse": {
+            (warehouse.location_name + (f" (warehouse.location_alias)" if warehouse.location_alias is not None else '')): {
+                'total_warehouse_sensors': len(warehouse.warehouse_sensors),
+                'total_warehouse_units': len(warehouse.warehouse_units),
+                'total_sensors_in_warehouse_and_all_units': sum(
+                        len(unit.unit_sensors) for unit in warehouse.warehouse_units
+                    ) + len(warehouse.warehouse_sensors),
+                'count_warehouse_sensors_by_state': {
+                    'count_normal': len(list(filter(lambda x: x.sensor_health_state == GenesisItemState.NORMAL, warehouse.warehouse_sensors))),
+                    'count_out_of_range': len(list(filter(lambda x: x.sensor_health_state == GenesisItemState.OUT_OF_RANGE, warehouse.warehouse_sensors))),
+                    'count_inactive': len(list(filter(lambda x: x.sensor_health_state == GenesisItemState.INACTIVE, warehouse.warehouse_sensors)))
+                },
+                'count_warehouse_units_by_state': {
+                    'count_normal': len(list(filter(lambda x: x.unit_health_state == GenesisItemState.NORMAL, warehouse.warehouse_units))),
+                    'count_out_of_range': len(list(filter(lambda x: x.unit_health_state == GenesisItemState.OUT_OF_RANGE, warehouse.warehouse_units))),
+                    'count_inactive': len(list(filter(lambda x: x.unit_health_state == GenesisItemState.INACTIVE, warehouse.warehouse_units)))
+                }
+            }
+            for warehouse in model.locations
+        }
     }
 
 def scrape_all_genesis(sess: LiveServerSession) -> dict:
@@ -257,7 +279,7 @@ def scrape_all_genesis(sess: LiveServerSession) -> dict:
         raw_responses['warehouses'] = {} # Warehouse-level stuff
         raw_responses['units'] = {} # Unit-level stuff
 
-        for loc in tqdm.tqdm(locs):
+        for loc in tqdm.tqdm(locs, unit='warehouse'):
             loc_id = loc['id']
             loc_summary = sess.get("/locations/{warehouse_id}/summary".format(warehouse_id=loc_id)).json()
             raw_responses['location_summary'][loc_id] = loc_summary
@@ -265,7 +287,7 @@ def scrape_all_genesis(sess: LiveServerSession) -> dict:
             warlvl_details = sess.get("/metrics/warehouse/{warehouse_id}".format(warehouse_id=loc_id)).json()
             raw_responses['warehouses'][loc_id] = warlvl_details
 
-            for unit in tqdm.tqdm(raw_responses['warehouses'][loc_id]['wv_unit_summary']):
+            for unit in tqdm.tqdm(raw_responses['warehouses'][loc_id]['wv_unit_summary'], unit='unit'):
                 unit_id = unit['Unit Id']
                 unit_sensors = sess.get("/metrics/warehouse/{warehouse_id}/unit/{unit_id}".format(warehouse_id=loc_id, unit_id=unit_id)).json()
                 raw_responses['units'][unit_id] = unit_sensors
@@ -358,7 +380,6 @@ def scrape_all_genesis(sess: LiveServerSession) -> dict:
                 ]
             } for loc in raw_responses['locations']
         ]
-        parsed['counting'] = counting(raw_responses)
 
         return response
 
@@ -372,6 +393,7 @@ if __name__ == "__main__":
         })
 
         import time
+
         start_time = time.time()
         print("Scraping APIs...")
         data = scrape_all_genesis(sess)
@@ -380,15 +402,33 @@ if __name__ == "__main__":
         genesis_twc = Genesis.parse_obj(data['parsed'])
         docs_to_save.extend(genesis_twc.to_documents())
 
+        all_counting = counting(genesis_twc)
+        # print("Counting:", all_counting)
+        counts_doc = Document(
+            page_content=json.dumps(all_counting),
+            metadata={
+                'source': "Genesis TWC - totals, counts of, number of warehouse, unit, sensor",
+                'content_type': 'json'
+            }
+        )
+        docs_to_save.append(counts_doc)
+
         print("Splitting...")
-        export_docs: List[Document] = text_splitter.split_documents(docs_to_save)
+        # NOTE: Splitting JSON like this is a BAD IDEA!
+        export_docs: List[Document] = docs_to_save #text_splitter.split_documents(docs_to_save)
 
         # Insert all documents
         # genesisdb.delete()
 
         print("Inserting...")
-        for batch in tqdm.tqdm(make_batches(export_docs, batch_size=max(8, int(len(export_docs)/100)))):
+        insert_time = time.time()
+        for batch in tqdm.tqdm(make_batches(export_docs, batch_size=max(8, int(len(export_docs)/100))), unit="doc"):
             genesisdb.add_documents(batch)
         # genesisdb.persist()
+        finish_time = time.time()
 
-        print("Took %.2f seconds" % (time.time() - start_time))
+        print("Took %.2f seconds (%.2fs parsing, %.2fs uploading)" % (
+            finish_time - start_time,
+            insert_time - start_time,
+            finish_time - insert_time
+        ))

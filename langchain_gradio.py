@@ -38,7 +38,16 @@ class LLMOutputMode(str, enum.Enum):
     STREAM = "stream"
 
 
+class ModelExecMode(str, enum.Enum):
+    SYNC = "sync"
+    ASYNC = "async"
+
+
+# Some config options to optimize. These will go on the UI later
+
 TARGET_SOURCE_CHUNKS = 12
+MODEL_EXEC_MODE = ModelExecMode.ASYNC
+
 
 ALL_VECTORSTORES: Dict[str, Optional[VectorStore]] = dict(
     none = None,
@@ -107,10 +116,10 @@ def vs_collection_clear(vs: str):
 # LLM utils
 
 def get_llm() -> BaseLLM:
-    return OpenAI(
+    return ChatOpenAI(
         max_tokens=256, # 4096
         streaming=True,
-        temperature=0,
+        temperature=0.7,
         verbose=True
     )
 
@@ -259,10 +268,20 @@ class QueueCallbackHandler(BaseCallbackHandler):
         pass
 
 
+def _parse_llm_output(chain: Chain, result: Dict[str, str]) -> str:
+    return '\n\n'.join(('%s:\n' % key.upper() if i > 0 else '') + result[key] for i, key in enumerate(chain.output_keys))
+
+
 def run_chain_sync(q: asyncio.Queue, chain: Chain, inputs: Union[str, Dict[str, str]]):
     stream_callback = QueueCallbackHandler(queue=q)
     result = chain(inputs, callbacks=[stream_callback])
-    return '\n\n'.join(('%s:\n' % key.upper() if i > 0 else '') + result[key] for i, key in enumerate(chain.output_keys))
+    return _parse_llm_output(chain, result)
+
+async def run_chain_async(q: asyncio.Queue, chain: Chain, inputs: Union[str, Dict[str, str]]):
+    stream_callback = QueueCallbackHandler(queue=q)
+    result = await chain.acall(inputs, callbacks=[stream_callback])
+    return _parse_llm_output(chain, result)
+
 
 class ChatWrapper:
     def __init__(self):
@@ -304,8 +323,14 @@ class ChatWrapper:
             llm_args = [chain, user_message]
 
             output_queue = asyncio.Queue()
-            output_task = asyncio.get_running_loop().run_in_executor(
-                self._exec, run_chain_sync, output_queue, *llm_args)
+
+            if MODEL_EXEC_MODE == ModelExecMode.SYNC:
+                output_task = asyncio.get_running_loop().run_in_executor(
+                    self._exec, run_chain_sync, output_queue, *llm_args)
+            elif MODEL_EXEC_MODE == ModelExecMode.ASYNC:
+                output_task = asyncio.create_task(run_chain_async(output_queue, *llm_args))
+            else:
+                raise ValueError("Invalid MODEL_EXEC_MODE set (%s)" % MODEL_EXEC_MODE)
 
             chat_output[1] = "Generating..."
             yield history
@@ -429,6 +454,8 @@ with gr.Blocks().queue(20) as demo:
         show_progress='minimal')
     reload_chain_btn.click(reload_chain, inputs=[tb_chain_path, loaded_llm, dd_select_vs], outputs=[tb_chain_path, loaded_chain],
         show_progress='minimal')
+
+    # list_files_ready.upload(lambda x: print(x), inputs=list_files_ready)
 
     dd_select_vs.select(get_uploaded_files_list, inputs=dd_select_vs, outputs=list_files_ready)
     file_upload_box.upload(handle_upload, inputs=[file_upload_box, dd_select_vs], outputs=list_files_ready, show_progress='minimal')
