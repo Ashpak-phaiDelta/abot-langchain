@@ -2,8 +2,6 @@
 # clear the collection called 'genesis' in the vectorstore and then run this.
 
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-
 from langchain.schema import Document
 from pydantic import BaseModel, Field, Extra
 from pydantic_yaml import to_yaml_str
@@ -50,10 +48,6 @@ class LiveServerSession(requests.Session):
 def make_batches(items: List, batch_size: int = 1) -> List:
     return [items[i : i + batch_size] for i in range(0, len(items), batch_size)]
 
-
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=SPLIT_CHUNK_SIZE, chunk_overlap=SPLIT_CHUNK_OVERLAP
-)
 
 # Call first time
 # genesisdb.create_collection()
