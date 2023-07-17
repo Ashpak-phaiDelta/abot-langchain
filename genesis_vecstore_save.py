@@ -83,19 +83,21 @@ class GenesisItemState(str, enum.Enum):
 
 
 class GenesisLocationBase(BaseModel, extra=Extra.ignore):
-    # location_id: int
+    location_id: int
     location_name: str
     location_alias: Optional[str]
 
 
 class GenesisUnitBase(BaseModel, extra=Extra.ignore):
-    # unit_id: int
+    unit_id: int
     unit_name: str
     unit_alias: Optional[str]
 
 
-class GenesisSensorSummary(MakeDocsMixin, BaseModel, extra=Extra.ignore):
-    # sensor_id: Optional[int]
+class GenesisSensorSummary(
+    MakeDocsMixin, BaseModel, extra=Extra.ignore, allow_population_by_field_name=True
+):
+    sensor_id: Optional[int]
     sensor_type: str
     sensor_subtype: str
     sensor_given_name: str
@@ -125,11 +127,10 @@ class GenesisSensorSummary(MakeDocsMixin, BaseModel, extra=Extra.ignore):
             # )
         }
 
-    class Config:
-        allow_population_by_field_name = True
 
-
-class GenesisUnitSummary(MakeDocsMixin, GenesisUnitBase, BaseModel):
+class GenesisUnitSummary(
+    MakeDocsMixin, GenesisUnitBase, BaseModel, allow_population_by_field_name=True
+):
     unit_sensors_out_count: Union[int, str]
     unit_health_state: GenesisItemState
     unit_location_at: GenesisLocationBase
@@ -163,9 +164,6 @@ class GenesisUnitSummary(MakeDocsMixin, GenesisUnitBase, BaseModel):
             )
         )
 
-    class Config:
-        allow_population_by_field_name = True
-
 
 class GeoCoordinate(BaseModel):
     latitude: float
@@ -190,7 +188,9 @@ class GenesisLocationSummary(BaseModel, extra=Extra.allow):
     emergencies: Optional[GenesisLocationSummaryItem]
 
 
-class GenesisLocation(MakeDocsMixin, GenesisLocationBase, BaseModel):
+class GenesisLocation(
+    MakeDocsMixin, GenesisLocationBase, BaseModel, allow_population_by_field_name=True
+):
     location_coords: GeoCoordinate
     location_health_state: GenesisItemState
     location_summary: GenesisLocationSummary
@@ -216,12 +216,9 @@ class GenesisLocation(MakeDocsMixin, GenesisLocationBase, BaseModel):
     def _additional_metadata(self) -> dict:
         return {"description": "Warehouse (location) used by company TWC"}
 
-    class Config:
-        allow_population_by_field_name = True
-
 
 class Genesis(BaseModel):
-    class _GenesisMetadata(BaseModel=Extra.allow):
+    class _GenesisMetadata(BaseModel, extra=Extra.allow):
         website_owner: str
         genesis_instance_owner: str
 
@@ -248,13 +245,14 @@ class Genesis(BaseModel):
 class DataCounts(MakeDocsMixin, BaseModel):
     all_warehouses: dict
     description: str
+    warehouse: dict
 
     @property
     def _doc_source_template(self) -> str:
         return "Genesis Warehouse Location: TWC - totals & number of warehouse, unit and sensor"
 
 
-def counting(model: Genesis):
+def genesis_counting(model: Genesis):
     return {
         "description": "All totals, counts of, total number of sensors at, units, warehouses, also grouped by state. Unit normal/inactive count, number of sensors",
         "all_warehouses": {
@@ -374,8 +372,9 @@ def scrape_all_genesis(sess: LiveServerSession) -> dict:
 
     try:
         locs = sess.get("/locations").json()
+
         raw_responses["locations"] = locs
-        raw_responses["location_summary"] = {}
+        raw_responses["location_summary"] = {}  # Landing-level stuff
         raw_responses["warehouses"] = {}  # Warehouse-level stuff
         raw_responses["units"] = {}  # Unit-level stuff
 
@@ -525,7 +524,7 @@ if __name__ == "__main__":
         docs_to_save.extend(genesis_twc.to_documents())
 
         print("Counting...")
-        all_counting = counting(genesis_twc)
+        all_counting = genesis_counting(genesis_twc)
         all_data_counts = DataCounts.parse_obj(all_counting)
         docs_to_save.extend(all_data_counts.to_documents())
 
