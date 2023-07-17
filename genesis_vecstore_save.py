@@ -24,6 +24,8 @@ from genesis.config import GenesisSettings
 _settings = GenesisSettings()
 
 GENESIS_BASE_URL = "https://api.phaidelta.com/backend"
+GENESIS_TWC_WARLVL_ID = 10
+
 
 SPLIT_CHUNK_SIZE = 500
 SPLIT_CHUNK_OVERLAP = 30
@@ -80,19 +82,19 @@ class GenesisItemState(str, enum.Enum):
     INACTIVE = "INACTIVE"
 
 
-class GenesisLocationBase(BaseModel):
+class GenesisLocationBase(BaseModel, extra=Extra.ignore):
     # location_id: int
     location_name: str
     location_alias: Optional[str]
 
 
-class GenesisUnitBase(BaseModel):
+class GenesisUnitBase(BaseModel, extra=Extra.ignore):
     # unit_id: int
     unit_name: str
     unit_alias: Optional[str]
 
 
-class GenesisSensorSummary(MakeDocsMixin, BaseModel):
+class GenesisSensorSummary(MakeDocsMixin, BaseModel, extra=Extra.ignore):
     # sensor_id: Optional[int]
     sensor_type: str
     sensor_subtype: str
@@ -181,14 +183,11 @@ class GenesisLocationSummaryPower(BaseModel):
     unit: Optional[str]
 
 
-class GenesisLocationSummary(BaseModel):
+class GenesisLocationSummary(BaseModel, extra=Extra.allow):
     metrics: Optional[GenesisLocationSummaryItem]
     power: Optional[GenesisLocationSummaryPower]
     attendance: Optional[GenesisLocationSummaryItem]
     emergencies: Optional[GenesisLocationSummaryItem]
-
-    class Config:
-        extra = Extra.allow
 
 
 class GenesisLocation(MakeDocsMixin, GenesisLocationBase, BaseModel):
@@ -222,12 +221,9 @@ class GenesisLocation(MakeDocsMixin, GenesisLocationBase, BaseModel):
 
 
 class Genesis(BaseModel):
-    class _GenesisMetadata(BaseModel):
+    class _GenesisMetadata(BaseModel=Extra.allow):
         website_owner: str
         genesis_instance_owner: str
-
-        class Config:
-            extra = Extra.allow
 
     locations: List[GenesisLocation]
     metadata: _GenesisMetadata
@@ -435,7 +431,7 @@ def parse_genesis_apis(responses: dict):
             "location_summary": responses["location_summary"][loc["id"]],
             "warehouse_sensors": [
                 {
-                    # 'sensor_id': sensor['Sensor Id'],
+                    "sensor_id": sensor["Sensor Id"],
                     "sensor_type": sensor["Metric Type"],
                     "sensor_subtype": sensor["Metric Sub-Type"],
                     "sensor_given_name": sensor["Sensor Name"],
@@ -443,13 +439,13 @@ def parse_genesis_apis(responses: dict):
                     "sensor_measure_unit": sensor["Unit"],
                     "sensor_health_state": sensor["State"],
                     "sensor_unit_at": {
-                        # 'unit_id': -1,
+                        "unit_id": GENESIS_TWC_WARLVL_ID,
                         "unit_name": "Warehouse-level unit",
                         "unit_alias": "WARLVL (%s, %s)"
                         % (loc["name"], find_loc_alias(loc) or ""),
                     },
                     "sensor_location_at": {
-                        # 'location_id': loc['id'],
+                        "location_id": loc["id"],
                         "location_name": loc["name"],
                         "location_alias": find_loc_alias(loc),
                     },
@@ -458,19 +454,19 @@ def parse_genesis_apis(responses: dict):
             ],
             "warehouse_units": [
                 {
-                    # 'unit_id': unit['Unit Id'],
+                    "unit_id": unit["Unit Id"],
                     "unit_name": unit["Unit Name"],
                     "unit_alias": unit["Unit Alias"],
                     "unit_health_state": unit["State"],
                     "unit_sensors_out_count": unit["Value"],
                     "unit_location_at": {
-                        # 'location_id': loc['id'],
+                        "location_id": loc["id"],
                         "location_name": loc["name"],
                         "location_alias": find_loc_alias(loc),
                     },
                     "unit_sensors": [
                         {
-                            # 'sensor_id': '',
+                            "sensor_id": sensor["Sensor Id"],
                             "sensor_type": sensor["Metric Type"],
                             "sensor_subtype": sensor["Metric Sub-Type"],
                             "sensor_given_name": sensor["Sensor Name"],
@@ -478,12 +474,12 @@ def parse_genesis_apis(responses: dict):
                             "sensor_measure_unit": sensor["Unit"],
                             "sensor_health_state": sensor["State"],
                             "sensor_unit_at": {
-                                # 'unit_id': -1,
+                                "unit_id": GENESIS_TWC_WARLVL_ID,
                                 "unit_name": sensor["Unit Name"],
                                 "unit_alias": sensor["Unit Alias"],
                             },
                             "sensor_location_at": {
-                                # 'location_id': loc['id'],
+                                "location_id": loc["id"],
                                 "location_name": loc["name"],
                                 "location_alias": find_loc_alias(loc),
                             }
