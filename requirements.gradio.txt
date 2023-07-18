@@ -2,3 +2,4 @@ gradio
 unstructured[local-inference]
 layoutparser[layoutmodels,tesseract]
 pydantic-yaml
+requests-cache

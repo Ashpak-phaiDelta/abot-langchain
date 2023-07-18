@@ -8,11 +8,12 @@ from pydantic_yaml import to_yaml_str
 
 import enum
 import tqdm
-from mezmorize import Cache
-import requests
 import itertools
+from datetime import timedelta
 from urllib.parse import urljoin
 from typing import Optional, List, Union
+
+from requests_cache import CachedSession, SQLiteCache
 
 from vectorstores.doc_chroma import chromadb
 from vectorstores.genesis_pg import genesisdb
@@ -21,25 +22,23 @@ from genesis.config import GenesisSettings
 
 _settings = GenesisSettings()
 
+VECTORSTORE = genesisdb
+
 GENESIS_BASE_URL = "https://api.phaidelta.com/backend"
 GENESIS_TWC_WARLVL_ID = 10
+CACHE_PATH=".cache/requests.db"
+
+REQUESTS_CACHE = SQLiteCache(db_path=CACHE_PATH, wal=True)
+REQUESTS_CACHE_EXPIRY = timedelta(minutes=3)
 
 
-SPLIT_CHUNK_SIZE = 500
-SPLIT_CHUNK_OVERLAP = 30
-
-
-request_cache = Cache(CACHE_TYPE="filesystem", CACHE_DIR=".cache/requests")
-
-
-class LiveServerSession(requests.Session):
+class LiveServerSession(CachedSession):
     """Session with base url"""
 
-    def __init__(self, base_url: Optional[str] = None):
-        super().__init__()
+    def __init__(self, base_url: Optional[str] = None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.base_url = base_url
 
-    # @request_cache.memoize(500)
     def request(self, method, url, *args, **kwargs):
         url = urljoin(self.base_url.rstrip("/") + "/", url.lstrip("/"))
         return super().request(method, url, *args, **kwargs)
@@ -50,7 +49,7 @@ def make_batches(items: List, batch_size: int = 1) -> List:
 
 
 # Call first time
-# genesisdb.create_collection()
+# VECTORSTORE.create_collection()
 
 
 class MakeDocsMixin:
@@ -509,7 +508,10 @@ def parse_genesis_apis(responses: dict):
 
 
 if __name__ == "__main__":
-    with LiveServerSession(base_url=GENESIS_BASE_URL) as sess:
+    with LiveServerSession(
+            base_url=GENESIS_BASE_URL,
+            backend=REQUESTS_CACHE,
+            expire_after=REQUESTS_CACHE_EXPIRY) as sess:
         docs_to_save: List[Document] = []
         sess.headers.update(
             {
@@ -536,20 +538,22 @@ if __name__ == "__main__":
 
         print("Splitting...")
         # NOTE: Splitting JSON/YAML like this is a BAD IDEA!
-        export_docs: List[
-            Document
-        ] = docs_to_save  # text_splitter.split_documents(docs_to_save)
+        export_docs: List[Document] = (
+            docs_to_save  # text_splitter.split_documents(docs_to_save)
+        )
 
         # Insert [Upsert] all documents
 
         print("Inserting...")
         insert_time = time.time()
         for batch in tqdm.tqdm(
-            make_batches(export_docs, batch_size=max(8, int(len(export_docs) / 100))),
+            make_batches(export_docs, batch_size=max(8, int(len(export_docs) / 25))),
             unit="doc",
         ):
-            genesisdb.add_documents(batch)
-        # genesisdb.persist()
+            VECTORSTORE.add_documents(batch)
+
+        if hasattr(VECTORSTORE, 'persist'):
+            VECTORSTORE.persist()
         finish_time = time.time()
 
         print(
