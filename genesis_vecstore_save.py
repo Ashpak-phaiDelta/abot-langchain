@@ -115,11 +115,19 @@ class GenesisSensorSummary(
 
     def _additional_metadata(self) -> dict:
         return {
-            "description": "Sensors in warehouses and units of TWC"  # inside warehouse location"# %s%s" % (
+            "description": "Sensors in warehouses and units of TWC",  # inside warehouse location"# %s%s" % (
             #     self.sensor_location_at.location_name,
             #     '' if not self.sensor_location_at.location_alias else ' (%s)' % self.sensor_location_at.location_alias
-            # )
+            # ),
+            "type": "genesis/sensor",
         }
+
+class GenesisSensorSummaryWarehouse(GenesisSensorSummary):
+    '''Same as a regular sensor, but is designated as warehouse-level'''
+    def _additional_metadata(self) -> dict:
+        _old_metadata = super()._additional_metadata()
+        _old_metadata.update({"subtype": "genesis/warehouse/sensor"})
+        return _old_metadata
 
 
 class GenesisUnitSummary(
@@ -147,7 +155,8 @@ class GenesisUnitSummary(
                 ""
                 if not self.unit_location_at.location_alias
                 else " (%s)" % self.unit_location_at.location_alias,
-            )
+            ),
+            "type": "genesis/warehouse/unit",
         }
 
     def to_documents(self) -> List[Document]:
@@ -189,7 +198,7 @@ class GenesisLocation(
     location_health_state: GenesisItemState
     location_summary: GenesisLocationSummary
     warehouse_units: List[GenesisUnitSummary] = Field(exclude=True)
-    warehouse_sensors: List[GenesisSensorSummary] = Field(exclude=True)
+    warehouse_sensors: List[GenesisSensorSummaryWarehouse] = Field(exclude=True)
 
     @property
     def _doc_source_template(self) -> str:
@@ -203,12 +212,15 @@ class GenesisLocation(
             itertools.chain(
                 super().to_documents(),
                 *map(GenesisUnitSummary.to_documents, self.warehouse_units),
-                *map(GenesisSensorSummary.to_documents, self.warehouse_sensors),
+                *map(GenesisSensorSummaryWarehouse.to_documents, self.warehouse_sensors),
             )
         )
 
     def _additional_metadata(self) -> dict:
-        return {"description": "Warehouse (location) used by company TWC"}
+        return {
+            "description": "Warehouse (location) used by company TWC",
+            "type": "genesis/warehouse",
+        }
 
 
 class Genesis(BaseModel):
