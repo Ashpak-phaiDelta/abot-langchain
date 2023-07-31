@@ -2,6 +2,29 @@
 # clear the collection called 'genesis' in the vectorstore and then run this.
 
 
+def _patch_langchain():
+    from typing import Optional, List
+    from langchain.vectorstores.pgvector import PGVector
+    from sqlalchemy.orm import Session
+    from sqlalchemy import delete
+
+    def _delete_embeddings(self, ids: List[str] = None) -> None:
+        with Session(self._conn) as session:
+            query = delete(self.EmbeddingStore)
+            if ids is not None:
+                query = query.where(
+                    self.EmbeddingStore.custom_id.in_(ids)
+                )
+            session.execute(query)
+            session.commit()
+
+    if not hasattr(PGVector, "delete_embeddings"):
+        setattr(PGVector, "delete_embeddings", _delete_embeddings)
+
+
+_patch_langchain()
+
+
 from langchain.schema import Document
 from pydantic import BaseModel, Field, Extra
 from pydantic_yaml import to_yaml_str
@@ -26,7 +49,7 @@ VECTORSTORE = genesisdb
 
 GENESIS_BASE_URL = "https://api.phaidelta.com/backend"
 GENESIS_TWC_WARLVL_ID = 10
-CACHE_PATH=".cache/requests.db"
+CACHE_PATH = ".cache/requests.db"
 
 REQUESTS_CACHE = SQLiteCache(db_path=CACHE_PATH, wal=True)
 REQUESTS_CACHE_EXPIRY = timedelta(minutes=3)
@@ -99,6 +122,7 @@ class GenesisSensorSummary(
     sensor_health_state: GenesisItemState
     sensor_unit_at: GenesisUnitBase
     sensor_location_at: GenesisLocationBase
+    sensor_type_alt: Optional[str]
 
     @property
     def _doc_source_template(self) -> str:
@@ -121,8 +145,10 @@ class GenesisSensorSummary(
             "type": "genesis/sensor",
         }
 
+
 class GenesisSensorSummaryWarehouse(GenesisSensorSummary):
-    '''Same as a regular sensor, but is designated as warehouse-level'''
+    """Same as a regular sensor, but is designated as warehouse-level"""
+
     def _additional_metadata(self) -> dict:
         _old_metadata = super()._additional_metadata()
         _old_metadata.update({"subtype": "genesis/warehouse/sensor"})
@@ -211,7 +237,9 @@ class GenesisLocation(
             itertools.chain(
                 super().to_documents(),
                 *map(GenesisUnitSummary.to_documents, self.warehouse_units),
-                *map(GenesisSensorSummaryWarehouse.to_documents, self.warehouse_sensors),
+                *map(
+                    GenesisSensorSummaryWarehouse.to_documents, self.warehouse_sensors
+                ),
             )
         )
 
@@ -409,6 +437,13 @@ def scrape_all_genesis(sess: LiveServerSession) -> dict:
         return raw_responses
 
 
+def _get_alt_sensor_type(sensor) -> Optional[str]:
+    if sensor["Metric Sub-Type"] == "RH":
+        return "Humidity"
+    if sensor["Metric Type"] == "Power - EM":
+        return "Power/KWH/Energy Meter"
+
+
 def parse_genesis_apis(responses: dict):
     parsed = {}
 
@@ -478,7 +513,7 @@ def parse_genesis_apis(responses: dict):
                             "sensor_measure_unit": sensor["Unit"],
                             "sensor_health_state": sensor["State"],
                             "sensor_unit_at": {
-                                "unit_id": GENESIS_TWC_WARLVL_ID,
+                                "unit_id": unit["Unit Id"],
                                 "unit_name": sensor["Unit Name"],
                                 "unit_alias": sensor["Unit Alias"],
                             },
@@ -486,7 +521,8 @@ def parse_genesis_apis(responses: dict):
                                 "location_id": loc["id"],
                                 "location_name": loc["name"],
                                 "location_alias": find_loc_alias(loc),
-                            }
+                            },
+                            "sensor_type_alt": _get_alt_sensor_type(sensor)
                             # "Sensor Name": "B2 Bsmnt 1_temp",
                             # "Sensor Alias": "B2 Bsmnt 1_temp",
                             # "Percentage": null,
@@ -509,9 +545,10 @@ def parse_genesis_apis(responses: dict):
 
 if __name__ == "__main__":
     with LiveServerSession(
-            base_url=GENESIS_BASE_URL,
-            backend=REQUESTS_CACHE,
-            expire_after=REQUESTS_CACHE_EXPIRY) as sess:
+        base_url=GENESIS_BASE_URL,
+        backend=REQUESTS_CACHE,
+        expire_after=REQUESTS_CACHE_EXPIRY,
+    ) as sess:
         docs_to_save: List[Document] = []
         sess.headers.update(
             {
@@ -538,21 +575,24 @@ if __name__ == "__main__":
 
         print("Splitting...")
         # NOTE: Splitting JSON/YAML like this is a BAD IDEA!
-        export_docs: List[Document] = (
-            docs_to_save  # text_splitter.split_documents(docs_to_save)
-        )
+        export_docs: List[
+            Document
+        ] = docs_to_save  # text_splitter.split_documents(docs_to_save)
 
         # Insert [Upsert] all documents
 
         print("Inserting...")
         insert_time = time.time()
+
+        VECTORSTORE.delete_embeddings()
+
         for batch in tqdm.tqdm(
             make_batches(export_docs, batch_size=max(8, int(len(export_docs) / 25))),
             unit="doc",
         ):
             VECTORSTORE.add_documents(batch)
 
-        if hasattr(VECTORSTORE, 'persist'):
+        if hasattr(VECTORSTORE, "persist"):
             VECTORSTORE.persist()
         finish_time = time.time()
 
