@@ -442,6 +442,8 @@ def _get_alt_sensor_type(sensor) -> Optional[str]:
         return "Humidity"
     if sensor["Metric Type"] == "Power - EM":
         return "Power/KWH/Energy Meter"
+    if sensor["Metric Type"] == "Fire":
+        return "VESDA/Smoke"
 
 
 def parse_genesis_apis(responses: dict):
